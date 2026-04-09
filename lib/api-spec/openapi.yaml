@@ -1,0 +1,1782 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Whiskey Golf Fantasy Golf API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication
+  - name: users
+    description: User management
+  - name: tournaments
+    description: Tournament management
+  - name: golfers
+    description: Golfer pool management
+  - name: drafts
+    description: Draft room operations
+  - name: results
+    description: Results and scoring
+  - name: leaderboard
+    description: Leaderboard and stats
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterBody"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Username taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Login success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tournaments:
+    get:
+      operationId: listTournaments
+      tags: [tournaments]
+      summary: List all tournaments
+      responses:
+        "200":
+          description: List of tournaments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tournament"
+    post:
+      operationId: createTournament
+      tags: [tournaments]
+      summary: Create a new tournament
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTournamentBody"
+      responses:
+        "201":
+          description: Tournament created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tournaments/{id}:
+    get:
+      operationId: getTournament
+      tags: [tournaments]
+      summary: Get tournament by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Tournament with config, teams, and field
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateTournament
+      tags: [tournaments]
+      summary: Update tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTournamentBody"
+      responses:
+        "200":
+          description: Updated tournament
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tournaments/{id}/config:
+    get:
+      operationId: getTournamentConfig
+      tags: [tournaments]
+      summary: Get tournament config
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Tournament config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentConfig"
+    patch:
+      operationId: updateTournamentConfig
+      tags: [tournaments]
+      summary: Update tournament config
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTournamentConfigBody"
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentConfig"
+
+  /tournaments/{id}/position-points:
+    get:
+      operationId: getPositionPoints
+      tags: [tournaments]
+      summary: Get position points table for a tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Position points array
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PositionPoints"
+    post:
+      operationId: setPositionPoints
+      tags: [tournaments]
+      summary: Set (replace) position points table
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPositionPointsBody"
+      responses:
+        "200":
+          description: Updated position points
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PositionPoints"
+
+  /tournaments/{id}/golfers:
+    get:
+      operationId: getTournamentGolfers
+      tags: [golfers]
+      summary: Get golfer pool for a tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Golfer pool
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TournamentGolfer"
+    post:
+      operationId: addGolferToTournament
+      tags: [golfers]
+      summary: Add a golfer to tournament field
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddGolferBody"
+      responses:
+        "201":
+          description: Golfer added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentGolfer"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tournaments/{id}/golfers/csv:
+    post:
+      operationId: uploadGolfersCsv
+      tags: [golfers]
+      summary: Upload golfer pool via CSV
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CsvUploadBody"
+      responses:
+        "200":
+          description: Golfers imported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvUploadResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tournaments/{id}/golfers/{golferId}:
+    patch:
+      operationId: updateTournamentGolfer
+      tags: [golfers]
+      summary: Update a golfer in the tournament pool
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: golferId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGolferBody"
+      responses:
+        "200":
+          description: Updated golfer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentGolfer"
+    delete:
+      operationId: removeGolferFromTournament
+      tags: [golfers]
+      summary: Remove golfer from tournament pool
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: golferId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+
+  /tournaments/{id}/golfers/auto-salary:
+    post:
+      operationId: autoGenerateSalaries
+      tags: [golfers]
+      summary: Auto-generate salaries from odds for this tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutoSalaryBody"
+      responses:
+        "200":
+          description: Salaries generated
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TournamentGolfer"
+
+  /tournaments/{id}/draft/state:
+    get:
+      operationId: getDraftState
+      tags: [drafts]
+      summary: Get current draft state for a tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Draft state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DraftState"
+
+  /tournaments/{id}/draft/pick:
+    post:
+      operationId: makeDraftPick
+      tags: [drafts]
+      summary: Make a draft pick
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftPickBody"
+      responses:
+        "200":
+          description: Pick made
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DraftState"
+        "400":
+          description: Invalid pick
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tournaments/{id}/draft/remove-pick:
+    post:
+      operationId: removeDraftPick
+      tags: [drafts]
+      summary: Remove a pick from a team (before draft lock)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemovePickBody"
+      responses:
+        "200":
+          description: Pick removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DraftState"
+
+  /tournaments/{id}/draft/set-captain:
+    post:
+      operationId: setCaptain
+      tags: [drafts]
+      summary: Set captain for a team
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetCaptainBody"
+      responses:
+        "200":
+          description: Captain set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DraftState"
+
+  /tournaments/{id}/draft/lock:
+    post:
+      operationId: lockDraft
+      tags: [drafts]
+      summary: Lock the draft (move tournament to live)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Draft locked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+        "400":
+          description: Teams not valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tournaments/{id}/results:
+    get:
+      operationId: getTournamentResults
+      tags: [results]
+      summary: Get all golfer results for a tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GolferResult"
+
+  /tournaments/{id}/results/{golferPoolId}:
+    put:
+      operationId: upsertGolferResult
+      tags: [results]
+      summary: Enter or update a golfer's result
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: golferPoolId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertResultBody"
+      responses:
+        "200":
+          description: Result saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GolferResult"
+
+  /tournaments/{id}/results/{golferPoolId}/replacement:
+    put:
+      operationId: upsertReplacementResult
+      tags: [results]
+      summary: Set replacement golfer result for a missed-cut slot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: golferPoolId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertReplacementBody"
+      responses:
+        "200":
+          description: Replacement result saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplacementResult"
+
+  /tournaments/{id}/scores:
+    get:
+      operationId: getTournamentScores
+      tags: [results]
+      summary: Get calculated team scores for a tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Calculated scores
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentScores"
+
+  /tournaments/{id}/complete:
+    post:
+      operationId: completeTournament
+      tags: [results]
+      summary: Mark tournament complete and determine winner
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Tournament completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+
+  /tournaments/{id}/join:
+    post:
+      operationId: joinTournament
+      tags: [drafts]
+      summary: Join a tournament (creates a fantasy team for the logged-in user)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Joined tournament
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DraftState"
+        "400":
+          description: Already joined or tournament not in draft state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /leaderboard:
+    get:
+      operationId: getLeaderboard
+      tags: [leaderboard]
+      summary: Get all-time leaderboard stats
+      responses:
+        "200":
+          description: Leaderboard
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaderboardEntry"
+
+  /leaderboard/head-to-head:
+    get:
+      operationId: getHeadToHead
+      tags: [leaderboard]
+      summary: Get head-to-head records between all player pairs
+      responses:
+        "200":
+          description: Head-to-head records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HeadToHeadRecord"
+
+  /leaderboard/tournament-history:
+    get:
+      operationId: getTournamentHistory
+      tags: [leaderboard]
+      summary: Get tournament winners history
+      responses:
+        "200":
+          description: Tournament history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TournamentHistoryEntry"
+
+  /leaderboard/score-progression:
+    get:
+      operationId: getScoreProgression
+      tags: [leaderboard]
+      summary: Get cumulative score progression over time per player
+      responses:
+        "200":
+          description: Score progression
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScoreProgressionEntry"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [leaderboard]
+      summary: Get dashboard summary stats
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    RegisterBody:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        displayName:
+          type: string
+      required:
+        - username
+        - password
+        - displayName
+
+    LoginBody:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required:
+        - username
+        - password
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - user
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        displayName:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - username
+        - displayName
+        - createdAt
+
+    Tournament:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        courseName:
+          type: ["string", "null"]
+        startDate:
+          type: string
+        endDate:
+          type: string
+        status:
+          type: string
+          enum: [draft, live, completed]
+        notes:
+          type: ["string", "null"]
+        winnerId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        completedAt:
+          type: ["string", "null"]
+      required:
+        - id
+        - name
+        - startDate
+        - endDate
+        - status
+        - createdAt
+
+    TournamentDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        courseName:
+          type: ["string", "null"]
+        startDate:
+          type: string
+        endDate:
+          type: string
+        status:
+          type: string
+          enum: [draft, live, completed]
+        notes:
+          type: ["string", "null"]
+        winnerId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        completedAt:
+          type: ["string", "null"]
+        config:
+          $ref: "#/components/schemas/TournamentConfig"
+        golfers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TournamentGolfer"
+        teams:
+          type: array
+          items:
+            $ref: "#/components/schemas/FantasyTeam"
+      required:
+        - id
+        - name
+        - startDate
+        - endDate
+        - status
+        - createdAt
+        - config
+        - golfers
+        - teams
+
+    CreateTournamentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        courseName:
+          type: ["string", "null"]
+        startDate:
+          type: string
+        endDate:
+          type: string
+        notes:
+          type: ["string", "null"]
+        config:
+          $ref: "#/components/schemas/UpdateTournamentConfigBody"
+      required:
+        - name
+        - startDate
+        - endDate
+
+    UpdateTournamentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        courseName:
+          type: ["string", "null"]
+        startDate:
+          type: string
+        endDate:
+          type: string
+        status:
+          type: string
+          enum: [draft, live, completed]
+        notes:
+          type: ["string", "null"]
+
+    TournamentConfig:
+      type: object
+      properties:
+        id:
+          type: integer
+        tournamentId:
+          type: integer
+        draftType:
+          type: string
+          enum: [alternate, snake]
+        salaryCap:
+          type: integer
+        rosterSize:
+          type: integer
+        captainMultiplier:
+          type: number
+        birdiePoints:
+          type: number
+        eaglePoints:
+          type: number
+        bogeyPenalty:
+          type: number
+        missedCutPenalty:
+          type: number
+        replacementTopRankLockout:
+          type: integer
+        requireAmerican:
+          type: boolean
+        requireEuropean:
+          type: boolean
+        requireRow:
+          type: boolean
+        requireOutsideTop30:
+          type: boolean
+        salaryMin:
+          type: integer
+        salaryMax:
+          type: integer
+        scoringPlaces:
+          type: integer
+        firstPlacePoints:
+          type: integer
+      required:
+        - id
+        - tournamentId
+        - draftType
+        - salaryCap
+        - rosterSize
+        - captainMultiplier
+        - birdiePoints
+        - eaglePoints
+        - bogeyPenalty
+        - missedCutPenalty
+        - replacementTopRankLockout
+        - requireAmerican
+        - requireEuropean
+        - requireRow
+        - requireOutsideTop30
+        - salaryMin
+        - salaryMax
+        - scoringPlaces
+        - firstPlacePoints
+
+    UpdateTournamentConfigBody:
+      type: object
+      properties:
+        draftType:
+          type: string
+          enum: [alternate, snake]
+        salaryCap:
+          type: integer
+        rosterSize:
+          type: integer
+        captainMultiplier:
+          type: number
+        birdiePoints:
+          type: number
+        eaglePoints:
+          type: number
+        bogeyPenalty:
+          type: number
+        missedCutPenalty:
+          type: number
+        replacementTopRankLockout:
+          type: integer
+        requireAmerican:
+          type: boolean
+        requireEuropean:
+          type: boolean
+        requireRow:
+          type: boolean
+        requireOutsideTop30:
+          type: boolean
+        salaryMin:
+          type: integer
+        salaryMax:
+          type: integer
+        scoringPlaces:
+          type: integer
+        firstPlacePoints:
+          type: integer
+
+    PositionPoints:
+      type: object
+      properties:
+        position:
+          type: integer
+        points:
+          type: number
+      required:
+        - position
+        - points
+
+    SetPositionPointsBody:
+      type: object
+      properties:
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/PositionPoints"
+      required:
+        - points
+
+    TournamentGolfer:
+      type: object
+      properties:
+        id:
+          type: integer
+        tournamentId:
+          type: integer
+        golferName:
+          type: string
+        nationality:
+          type: string
+        region:
+          type: string
+          enum: [EU, US, ROW]
+        avgOdds:
+          type: ["number", "null"]
+        worldRanking:
+          type: ["integer", "null"]
+        marketRank:
+          type: ["integer", "null"]
+        salary:
+          type: ["integer", "null"]
+        outsideTop30:
+          type: boolean
+        eligibleForReplacement:
+          type: boolean
+      required:
+        - id
+        - tournamentId
+        - golferName
+        - nationality
+        - region
+        - outsideTop30
+        - eligibleForReplacement
+
+    AddGolferBody:
+      type: object
+      properties:
+        golferName:
+          type: string
+        nationality:
+          type: string
+        region:
+          type: string
+          enum: [EU, US, ROW]
+        avgOdds:
+          type: ["number", "null"]
+        worldRanking:
+          type: ["integer", "null"]
+        salary:
+          type: ["integer", "null"]
+        marketRank:
+          type: ["integer", "null"]
+        outsideTop30:
+          type: boolean
+      required:
+        - golferName
+        - nationality
+        - region
+
+    UpdateGolferBody:
+      type: object
+      properties:
+        golferName:
+          type: string
+        nationality:
+          type: string
+        region:
+          type: string
+          enum: [EU, US, ROW]
+        avgOdds:
+          type: ["number", "null"]
+        worldRanking:
+          type: ["integer", "null"]
+        salary:
+          type: ["integer", "null"]
+        marketRank:
+          type: ["integer", "null"]
+        outsideTop30:
+          type: boolean
+
+    CsvUploadBody:
+      type: object
+      properties:
+        csvData:
+          type: string
+          description: Raw CSV text content
+        replaceExisting:
+          type: boolean
+      required:
+        - csvData
+
+    CsvUploadResponse:
+      type: object
+      properties:
+        imported:
+          type: integer
+        skipped:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+        golfers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TournamentGolfer"
+      required:
+        - imported
+        - skipped
+        - errors
+        - golfers
+
+    AutoSalaryBody:
+      type: object
+      properties:
+        salaryMin:
+          type: integer
+        salaryMax:
+          type: integer
+      required:
+        - salaryMin
+        - salaryMax
+
+    DraftState:
+      type: object
+      properties:
+        tournamentId:
+          type: integer
+        status:
+          type: string
+          enum: [draft, live, completed]
+        currentTurnUserId:
+          type: ["integer", "null"]
+        teams:
+          type: array
+          items:
+            $ref: "#/components/schemas/FantasyTeam"
+        availableGolfers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TournamentGolfer"
+        validation:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationMessage"
+      required:
+        - tournamentId
+        - status
+        - teams
+        - availableGolfers
+        - validation
+
+    ValidationMessage:
+      type: object
+      properties:
+        teamId:
+          type: ["integer", "null"]
+        type:
+          type: string
+        message:
+          type: string
+        valid:
+          type: boolean
+      required:
+        - type
+        - message
+        - valid
+
+    FantasyTeam:
+      type: object
+      properties:
+        id:
+          type: integer
+        tournamentId:
+          type: integer
+        userId:
+          type: integer
+        userName:
+          type: string
+        userDisplayName:
+          type: string
+        totalSalary:
+          type: ["integer", "null"]
+        totalScore:
+          type: ["number", "null"]
+        isWinner:
+          type: boolean
+        picks:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamPick"
+      required:
+        - id
+        - tournamentId
+        - userId
+        - userName
+        - userDisplayName
+        - isWinner
+        - picks
+
+    TeamPick:
+      type: object
+      properties:
+        id:
+          type: integer
+        fantasyTeamId:
+          type: integer
+        golferPoolId:
+          type: integer
+        golferName:
+          type: string
+        region:
+          type: string
+        salary:
+          type: ["integer", "null"]
+        slotNumber:
+          type: integer
+        isCaptain:
+          type: boolean
+        missedCut:
+          type: boolean
+        replacementGolferPoolId:
+          type: ["integer", "null"]
+        replacementGolferName:
+          type: ["string", "null"]
+        slotScorePreMultiplier:
+          type: ["number", "null"]
+        slotScorePostMultiplier:
+          type: ["number", "null"]
+      required:
+        - id
+        - fantasyTeamId
+        - golferPoolId
+        - golferName
+        - region
+        - slotNumber
+        - isCaptain
+        - missedCut
+        - isWinner
+
+    DraftPickBody:
+      type: object
+      properties:
+        golferPoolId:
+          type: integer
+        teamId:
+          type: integer
+      required:
+        - golferPoolId
+        - teamId
+
+    RemovePickBody:
+      type: object
+      properties:
+        pickId:
+          type: integer
+      required:
+        - pickId
+
+    SetCaptainBody:
+      type: object
+      properties:
+        teamId:
+          type: integer
+        pickId:
+          type: integer
+      required:
+        - teamId
+        - pickId
+
+    GolferResult:
+      type: object
+      properties:
+        id:
+          type: integer
+        tournamentId:
+          type: integer
+        golferPoolId:
+          type: integer
+        golferName:
+          type: string
+        finishPosition:
+          type: ["integer", "null"]
+        birdies:
+          type: ["integer", "null"]
+        eagles:
+          type: ["integer", "null"]
+        bogeys:
+          type: ["integer", "null"]
+        missedCut:
+          type: boolean
+      required:
+        - id
+        - tournamentId
+        - golferPoolId
+        - golferName
+        - missedCut
+
+    UpsertResultBody:
+      type: object
+      properties:
+        finishPosition:
+          type: ["integer", "null"]
+        birdies:
+          type: ["integer", "null"]
+        eagles:
+          type: ["integer", "null"]
+        bogeys:
+          type: ["integer", "null"]
+        missedCut:
+          type: boolean
+
+    ReplacementResult:
+      type: object
+      properties:
+        id:
+          type: integer
+        tournamentId:
+          type: integer
+        originalPickId:
+          type: integer
+        replacementGolferPoolId:
+          type: integer
+        replacementGolferName:
+          type: string
+        finishPosition:
+          type: ["integer", "null"]
+        birdies:
+          type: ["integer", "null"]
+        eagles:
+          type: ["integer", "null"]
+        bogeys:
+          type: ["integer", "null"]
+        replacementScore:
+          type: ["number", "null"]
+      required:
+        - id
+        - tournamentId
+        - originalPickId
+        - replacementGolferPoolId
+        - replacementGolferName
+
+    UpsertReplacementBody:
+      type: object
+      properties:
+        replacementGolferPoolId:
+          type: integer
+        finishPosition:
+          type: ["integer", "null"]
+        birdies:
+          type: ["integer", "null"]
+        eagles:
+          type: ["integer", "null"]
+        bogeys:
+          type: ["integer", "null"]
+      required:
+        - replacementGolferPoolId
+
+    SlotScore:
+      type: object
+      properties:
+        pickId:
+          type: integer
+        golferName:
+          type: string
+        isCaptain:
+          type: boolean
+        missedCut:
+          type: boolean
+        finishPoints:
+          type: number
+        birdiePoints:
+          type: number
+        eaglePoints:
+          type: number
+        bogeyPenalty:
+          type: number
+        missedCutPenalty:
+          type: number
+        replacementScore:
+          type: number
+        preMultiplierScore:
+          type: number
+        finalScore:
+          type: number
+      required:
+        - pickId
+        - golferName
+        - isCaptain
+        - missedCut
+        - finishPoints
+        - birdiePoints
+        - eaglePoints
+        - bogeyPenalty
+        - missedCutPenalty
+        - replacementScore
+        - preMultiplierScore
+        - finalScore
+
+    TeamScore:
+      type: object
+      properties:
+        teamId:
+          type: integer
+        userId:
+          type: integer
+        userDisplayName:
+          type: string
+        totalScore:
+          type: number
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/SlotScore"
+      required:
+        - teamId
+        - userId
+        - userDisplayName
+        - totalScore
+        - slots
+
+    TournamentScores:
+      type: object
+      properties:
+        tournamentId:
+          type: integer
+        teams:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamScore"
+        winnerId:
+          type: ["integer", "null"]
+      required:
+        - tournamentId
+        - teams
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        userId:
+          type: integer
+        displayName:
+          type: string
+        tournamentsPlayed:
+          type: integer
+        wins:
+          type: integer
+        winPercentage:
+          type: number
+        totalScore:
+          type: number
+        avgScore:
+          type: number
+        highestScore:
+          type: number
+        lowestScore:
+          type: number
+      required:
+        - userId
+        - displayName
+        - tournamentsPlayed
+        - wins
+        - winPercentage
+        - totalScore
+        - avgScore
+        - highestScore
+        - lowestScore
+
+    HeadToHeadRecord:
+      type: object
+      properties:
+        user1Id:
+          type: integer
+        user1DisplayName:
+          type: string
+        user2Id:
+          type: integer
+        user2DisplayName:
+          type: string
+        user1Wins:
+          type: integer
+        user2Wins:
+          type: integer
+        draws:
+          type: integer
+        tournamentsPlayed:
+          type: integer
+      required:
+        - user1Id
+        - user1DisplayName
+        - user2Id
+        - user2DisplayName
+        - user1Wins
+        - user2Wins
+        - draws
+        - tournamentsPlayed
+
+    TournamentHistoryEntry:
+      type: object
+      properties:
+        tournamentId:
+          type: integer
+        tournamentName:
+          type: string
+        courseName:
+          type: ["string", "null"]
+        startDate:
+          type: string
+        endDate:
+          type: string
+        winnerId:
+          type: ["integer", "null"]
+        winnerName:
+          type: ["string", "null"]
+        winnerScore:
+          type: ["number", "null"]
+      required:
+        - tournamentId
+        - tournamentName
+        - startDate
+        - endDate
+
+    ScoreProgressionEntry:
+      type: object
+      properties:
+        userId:
+          type: integer
+        displayName:
+          type: string
+        tournamentId:
+          type: integer
+        tournamentName:
+          type: string
+        score:
+          type: number
+        cumulativeScore:
+          type: number
+      required:
+        - userId
+        - displayName
+        - tournamentId
+        - tournamentName
+        - score
+        - cumulativeScore
+
+    ActiveTournamentCard:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        courseName:
+          type: ["string", "null"]
+        startDate:
+          type: string
+        endDate:
+          type: string
+        status:
+          type: string
+          enum: [draft, live, completed]
+        currentTurnUserId:
+          type: ["integer", "null"]
+        currentTurnUserName:
+          type: ["string", "null"]
+        userHasTeam:
+          type: boolean
+        userIsCurrentTurn:
+          type: boolean
+        participantCount:
+          type: integer
+        standings:
+          type: array
+          items:
+            type: object
+            properties:
+              userId:
+                type: integer
+              displayName:
+                type: string
+              totalScore:
+                type: ["number", "null"]
+            required:
+              - userId
+              - displayName
+              - totalScore
+      required:
+        - id
+        - name
+        - startDate
+        - endDate
+        - status
+        - userHasTeam
+        - userIsCurrentTurn
+        - participantCount
+        - standings
+
+    DashboardSummary:
+      type: object
+      properties:
+        totalTournaments:
+          type: integer
+        activeTournaments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActiveTournamentCard"
+        recentTournaments:
+          type: array
+          items:
+            $ref: "#/components/schemas/TournamentHistoryEntry"
+        leaderboardSnapshot:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+        totalUsers:
+          type: integer
+      required:
+        - totalTournaments
+        - activeTournaments
+        - recentTournaments
+        - leaderboardSnapshot
+        - totalUsers
