@@ -285,7 +285,7 @@ router.post("/tournaments/:id/draft/set-captain", async (req, res): Promise<void
   res.json(state);
 });
 
-router.post("/tournaments/:id/draft/join", async (req, res): Promise<void> => {
+async function handleDraftJoin(req: import("express").Request, res: import("express").Response): Promise<void> {
   const params = JoinTournamentParams.safeParse({ id: parseId(req.params.id) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
@@ -311,7 +311,9 @@ router.post("/tournaments/:id/draft/join", async (req, res): Promise<void> => {
 
   const state = await buildDraftState(params.data.id);
   res.json(state);
-});
+}
+
+router.post("/tournaments/:id/draft/join", handleDraftJoin);
 
 router.post("/tournaments/:id/draft/lock", async (req, res): Promise<void> => {
   const params = LockDraftParams.safeParse({ id: parseId(req.params.id) });

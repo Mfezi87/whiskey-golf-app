@@ -102,7 +102,7 @@ router.get("/tournaments/:id/participants", asyncHandler(async (req, res): Promi
     }
   }
 
-  const allParticipants = allowedViaToken ? [] : await getAllParticipants(tournamentId);
+  const allParticipants = await getAllParticipants(tournamentId);
 
   let visibleParticipants: typeof allParticipants;
   if (isCommissioner) {
