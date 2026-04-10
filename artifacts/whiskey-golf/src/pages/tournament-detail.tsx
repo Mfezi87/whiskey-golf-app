@@ -1258,7 +1258,7 @@ function ParticipantsTab({ tournamentId, userId, commissionerUserId }: { tournam
   });
 
   const openJoin = useMutation({
-    mutationFn: () => participantsFetch(`/api/tournaments/${tournamentId}/join`, "POST"),
+    mutationFn: () => participantsFetch(`/api/tournaments/${tournamentId}/open-join`, "POST"),
     onSuccess: () => { toast({ title: "You've joined the tournament!" }); invalidate(); },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -1270,11 +1270,11 @@ function ParticipantsTab({ tournamentId, userId, commissionerUserId }: { tournam
   });
 
   const generateLink = useMutation({
-    mutationFn: () => participantsFetch<{ token: string; enabled: boolean }>(`/api/tournaments/${tournamentId}/invite-link`, "POST"),
+    mutationFn: () => participantsFetch<{ token: string; enabled: boolean; link: string }>(`/api/tournaments/${tournamentId}/invite-link`, "POST"),
     onSuccess: (d) => {
-      const link = `${window.location.origin}/tournaments/${tournamentId}?invite=${(d as { token: string }).token}`;
-      navigator.clipboard.writeText(link).catch(() => {});
-      toast({ title: "Invite link copied!", description: link });
+      const data = d as { token: string; enabled: boolean; link: string };
+      navigator.clipboard.writeText(data.link).catch(() => {});
+      toast({ title: "Invite link copied!", description: data.link });
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });

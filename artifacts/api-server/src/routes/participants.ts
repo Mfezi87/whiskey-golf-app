@@ -130,7 +130,7 @@ router.post("/tournaments/:id/request-join", asyncHandler(async (req, res): Prom
   res.status(201).json(await formatParticipant(participant));
 }));
 
-router.post("/tournaments/:id/join", asyncHandler(async (req, res): Promise<void> => {
+router.post("/tournaments/:id/open-join", asyncHandler(async (req, res): Promise<void> => {
   const tournamentId = parseId(req.params.id);
   const userId = requireAuth(req.session as Record<string, unknown>);
   const tournament = await getTournamentOrThrow(tournamentId);
@@ -260,7 +260,9 @@ router.post("/tournaments/:id/invite-link", asyncHandler(async (req, res): Promi
     .set({ inviteLinkToken: token, inviteLinkEnabled: true })
     .where(eq(tournamentsTable.id, tournamentId));
 
-  res.json({ token, enabled: true });
+  const origin = (req.headers.origin as string | undefined) ?? `${req.protocol}://${req.get("host")}`;
+  const link = `${origin}/tournaments/${tournamentId}?invite=${token}`;
+  res.json({ token, enabled: true, link });
 }));
 
 export default router;
