@@ -5,6 +5,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { errorHandler } from "./middlewares/error-handler";
 import { env } from "./config/env";
 
 const PgSession = connectPgSimple(session);
@@ -72,5 +73,6 @@ app.use(
 );
 
 app.use("/api", router);
+app.use(errorHandler);
 
 export default app;

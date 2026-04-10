@@ -1,4 +1,6 @@
 import { Router, type IRouter } from "express";
+import { asyncHandler } from "../middlewares/error-handler";
+import { BadRequestError, ConflictError, UnauthorizedError } from "../lib/http-errors";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -12,18 +14,16 @@ declare module "express-session" {
 
 const router: IRouter = Router();
 
-router.post("/auth/register", async (req, res): Promise<void> => {
+router.post("/auth/register", asyncHandler(async (req, res): Promise<void> => {
   const parsed = RegisterBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
+    throw new BadRequestError("Invalid registration payload", parsed.error.flatten());
   }
   const { username, password, displayName } = parsed.data;
 
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.username, username.toLowerCase()));
   if (existing) {
-    res.status(409).json({ error: "Username already taken" });
-    return;
+    throw new ConflictError("Username already taken");
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
@@ -41,26 +41,23 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       createdAt: user.createdAt.toISOString(),
     },
   });
-});
+}));
 
-router.post("/auth/login", async (req, res): Promise<void> => {
+router.post("/auth/login", asyncHandler(async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
+    throw new BadRequestError("Invalid login payload", parsed.error.flatten());
   }
   const { username, password } = parsed.data;
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.username, username.toLowerCase()));
   if (!user) {
-    res.status(401).json({ error: "Invalid username or password" });
-    return;
+    throw new UnauthorizedError("Invalid username or password");
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
-    res.status(401).json({ error: "Invalid username or password" });
-    return;
+    throw new UnauthorizedError("Invalid username or password");
   }
 
   req.session.userId = user.id;
@@ -72,22 +69,20 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       createdAt: user.createdAt.toISOString(),
     },
   });
-});
+}));
 
-router.post("/auth/logout", async (req, res): Promise<void> => {
+router.post("/auth/logout", asyncHandler(async (req, res): Promise<void> => {
   req.session.destroy(() => {});
   res.json({ message: "Logged out" });
-});
+}));
 
-router.get("/auth/me", async (req, res): Promise<void> => {
+router.get("/auth/me", asyncHandler(async (req, res): Promise<void> => {
   if (!req.session.userId) {
-    res.status(401).json({ error: "Not authenticated" });
-    return;
+    throw new UnauthorizedError("Not authenticated");
   }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId));
   if (!user) {
-    res.status(401).json({ error: "Not authenticated" });
-    return;
+    throw new UnauthorizedError("Not authenticated");
   }
   res.json({
     id: user.id,
@@ -95,6 +90,6 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     displayName: user.displayName,
     createdAt: user.createdAt.toISOString(),
   });
-});
+}));
 
 export default router;
