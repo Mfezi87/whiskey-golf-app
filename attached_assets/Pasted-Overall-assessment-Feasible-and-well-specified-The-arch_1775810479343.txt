@@ -1,0 +1,62 @@
+Overall assessment: Feasible and well-specified
+The architecture is a good fit for this. The brief is clearly written and the proposed service layer approach is correct. Here's what I found in the codebase and my recommendations.
+
+Critical finding: Commissioner backfill ambiguity (flag as requested)
+The brief explicitly says to stop and surface this rather than guess. There is currently no creator/owner field anywhere in the tournament table. When a tournament is created today, req.session.userId is never recorded against it. The two existing tournaments in the database (The Masters 2026 and Test) cannot be traced back to a specific user from the data alone.
+
+This needs a decision before implementation starts. The options are:
+
+Option A: Make commissionerUserId nullable. Existing tournaments get NULL. Commissioner-only actions are blocked on legacy tournaments with a clear "no commissioner set" error. Clean and honest.
+Option B: Make it nullable, but also expose a one-time "claim as commissioner" endpoint that only works on tournaments with no commissioner set, gated to logged-in users. Gives a migration path.
+Option C: Accept the messiness, make it nullable, and treat all existing fantasy team holders as implicit commissioners. Fragile and unclear.
+I'd recommend Option A — make it nullable, leave existing tournaments as NULL, and handle it gracefully in the UI. It's the most honest approach and the brief's own rule is "prefer explicit errors over magic cleanup."
+
+Schema observations and suggestions
+What the brief proposes vs what I'd recommend:
+
+Area	Brief says	My suggestion
+Enums for visibility/joinMode/status	Postgres pgEnum	Use text columns — matches the existing pattern (status, draftType are all text) and avoids painful enum migrations when values are added later. Zod handles validation.
+commissionerUserId	Required FK	Make nullable for legacy compat (see above)
+inviteLinkToken	Nullable string	Agree — random UUID generated on demand
+Participant table	Separate tournamentParticipants	Fully agree — don't touch fantasy_teams
+The brief's table structure is otherwise correct and I have no material changes to propose.
+
+Important backwards-compatibility concern: draft flow
+Currently in drafts.ts, a fantasy team is created automatically for any logged-in user when they join a draft (POST /tournaments/:id/start-draft). The brief says fantasy teams should only be created when a participant becomes joined. These two behaviours conflict.
+
+My recommendation: do not break the existing draft flow in this implementation slice. Instead:
+
+The new participant system operates independently alongside the draft system for now
+A participant becoming joined auto-creates their fantasy team going forward
+Existing tournaments retain their fantasy teams untouched
+A future patch can wire the two systems together once the access layer is stable
+This matches the brief's own fallback advice (section 24): "If unexpected complexity appears, prefer delivering schema + backend participant flows + minimal frontend controls first."
+
+Security gap in existing tournament listing
+GET /tournaments currently returns every tournament to any caller, authenticated or not. With the introduction of private visibility, this route immediately needs a filter:
+
+Authenticated: public tournaments + private tournaments where user is a participant
+Unauthenticated: public tournaments only
+This is a small but important change to the existing route that must be part of this slice, otherwise private tournaments are meaningless.
+
+Route change I'd suggest
+The brief proposes POST /tournaments/:id/join-via-link as a separate endpoint. I'd simplify this slightly — the invite-link token could just be a query parameter on the same POST /tournaments/:id/join endpoint, with the join-mode check determining whether a token is required. Fewer endpoints, cleaner client code. But this is a minor preference and the brief's approach works too.
+
+Frontend scope question
+The brief proposes a full 6-tab structure (Overview / Participants / Rules / Draft / Results / Standings) on the tournament detail page. That's a significant layout rework. To keep this deliverable focused, I'd suggest we implement:
+
+The Participants tab (the core deliverable)
+Visibility/join-mode controls on create/edit forms (required)
+Leave the rest of the tab structure as-is or consolidate existing content into Overview + Draft/Results as the two main tabs
+If you want the full 6-tab structure now, that's fine — just worth flagging the scope.
+
+Questions I need answers to before planning the implementation
+Commissioner backfill: For the existing tournaments (The Masters 2026, Test), which option do you want? A) Leave as NULL with clear UI handling, B) a "claim commissioner" endpoint, or C) assign to a specific user?
+
+Draft flow backwards compat: Should the existing draft flow (any user can join/pick) remain untouched in this slice, or do you want the participant joined requirement enforced on drafts immediately?
+
+GET /tournaments visibility filtering: Do you want this applied immediately in this slice, or deferred? (I'd recommend immediately, since private tournaments are otherwise discoverable.)
+
+Frontend tab structure: Full 6-tab rework now, or Participants tab added to the existing layout only?
+
+Text vs Postgres enums for the new columns: Happy to go with whichever you prefer — I'd suggest text for consistency, but Postgres enums give DB-level enforcement if you prefer that.
