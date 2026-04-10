@@ -2686,7 +2686,7 @@ export const useCompleteTournament = <
  * @summary Join a tournament (creates a fantasy team for the logged-in user)
  */
 export const getJoinTournamentUrl = (id: number) => {
-  return `/api/tournaments/${id}/join`;
+  return `/api/tournaments/${id}/draft/join`;
 };
 
 export const joinTournament = async (

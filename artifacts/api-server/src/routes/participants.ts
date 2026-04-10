@@ -87,14 +87,29 @@ router.get("/tournaments/:id/participants", asyncHandler(async (req, res): Promi
   const tournament = await getTournamentOrThrow(tournamentId);
   const isCommissioner = userId !== null && tournament.commissionerUserId === userId;
 
+  let allowedViaToken = false;
   if (!isCommissioner) {
     const allowed = await canViewTournament(tournament, userId);
     if (!allowed) {
-      throw new UnauthorizedError("You do not have access to this tournament");
+      if (tournament.joinMode === "link_only" && userId !== null) {
+        const inviteToken = req.query.invite as string | undefined;
+        if (inviteToken) {
+          try {
+            validateInviteLinkToken(tournament, inviteToken);
+            allowedViaToken = true;
+          } catch {
+            throw new UnauthorizedError("Invalid or expired invite link token");
+          }
+        } else {
+          throw new UnauthorizedError("You do not have access to this tournament");
+        }
+      } else {
+        throw new UnauthorizedError("You do not have access to this tournament");
+      }
     }
   }
 
-  const allParticipants = await getAllParticipants(tournamentId);
+  const allParticipants = allowedViaToken ? [] : await getAllParticipants(tournamentId);
 
   let visibleParticipants: typeof allParticipants;
   if (isCommissioner) {
@@ -130,14 +145,17 @@ router.post("/tournaments/:id/request-join", asyncHandler(async (req, res): Prom
   res.status(201).json(await formatParticipant(participant));
 }));
 
-router.post("/tournaments/:id/open-join", asyncHandler(async (req, res): Promise<void> => {
+async function handleOpenJoin(req: import("express").Request, res: import("express").Response): Promise<void> {
   const tournamentId = parseId(req.params.id);
   const userId = requireAuth(req.session as Record<string, unknown>);
   const tournament = await getTournamentOrThrow(tournamentId);
   assertJoinModeAllows(tournament, "open_join");
   const participant = await createJoinedParticipant(tournamentId, userId);
   res.status(201).json(await formatParticipant(participant));
-}));
+}
+
+router.post("/tournaments/:id/join", asyncHandler(handleOpenJoin));
+router.post("/tournaments/:id/open-join", asyncHandler(handleOpenJoin));
 
 router.post("/tournaments/:id/join-via-link", asyncHandler(async (req, res): Promise<void> => {
   const tournamentId = parseId(req.params.id);

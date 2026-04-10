@@ -1200,7 +1200,7 @@ function ParticipantsTab({ tournamentId, userId, commissionerUserId }: { tournam
 
   const { data, isLoading, refetch } = useQuery<ParticipantsResponse>({
     queryKey: qk,
-    queryFn: () => participantsFetch<ParticipantsResponse>(`/api/tournaments/${tournamentId}/participants`),
+    queryFn: () => participantsFetch<ParticipantsResponse>(`/api/tournaments/${tournamentId}/participants${inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ""}`),
     retry: 1,
   });
 
@@ -1258,7 +1258,7 @@ function ParticipantsTab({ tournamentId, userId, commissionerUserId }: { tournam
   });
 
   const openJoin = useMutation({
-    mutationFn: () => participantsFetch(`/api/tournaments/${tournamentId}/open-join`, "POST"),
+    mutationFn: () => participantsFetch(`/api/tournaments/${tournamentId}/join`, "POST"),
     onSuccess: () => { toast({ title: "You've joined the tournament!" }); invalidate(); },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });

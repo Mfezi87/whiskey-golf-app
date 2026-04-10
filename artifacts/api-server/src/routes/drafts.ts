@@ -285,7 +285,7 @@ router.post("/tournaments/:id/draft/set-captain", async (req, res): Promise<void
   res.json(state);
 });
 
-router.post("/tournaments/:id/join", async (req, res): Promise<void> => {
+router.post("/tournaments/:id/draft/join", async (req, res): Promise<void> => {
   const params = JoinTournamentParams.safeParse({ id: parseId(req.params.id) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 

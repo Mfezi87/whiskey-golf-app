@@ -17,7 +17,7 @@ import {
 } from "@workspace/api-zod";
 import { asyncHandler } from "../middlewares/error-handler";
 import { BadRequestError, UnauthorizedError } from "../lib/http-errors";
-import { assertCommissioner, getTournamentOrThrow } from "../services/tournament-access-service";
+import { assertCommissioner, getTournamentOrThrow, canViewTournament } from "../services/tournament-access-service";
 
 const router: IRouter = Router();
 
@@ -175,6 +175,13 @@ router.get("/tournaments/:id", asyncHandler(async (req, res): Promise<void> => {
 
   const [tournament] = await db.select().from(tournamentsTable).where(eq(tournamentsTable.id, params.data.id));
   if (!tournament) { res.status(404).json({ error: "Tournament not found" }); return; }
+
+  const userId: number | null = (req.session as { userId?: number }).userId ?? null;
+  const isCommissioner = userId !== null && tournament.commissionerUserId === userId;
+  if (!isCommissioner) {
+    const allowed = await canViewTournament(tournament, userId);
+    if (!allowed) throw new UnauthorizedError("You do not have access to this tournament");
+  }
 
   const [config] = await db.select().from(tournamentConfigsTable).where(eq(tournamentConfigsTable.tournamentId, tournament.id));
   const golfers = await db.select().from(tournamentGolfersTable).where(eq(tournamentGolfersTable.tournamentId, tournament.id)).orderBy(tournamentGolfersTable.marketRank);
