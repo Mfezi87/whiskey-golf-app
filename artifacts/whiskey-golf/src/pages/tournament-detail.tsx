@@ -68,7 +68,7 @@ export default function TournamentDetailPage() {
   const { data: tournament, isLoading: tLoading } = useGetTournament(id, {
     query: { queryKey: getGetTournamentQueryKey(id), enabled: !isNaN(id) },
   });
-  const t = tournament as { id: number; name: string; courseName?: string | null; startDate: string; endDate: string; status: string; notes?: string | null; winnerId?: number | null } | undefined;
+  const t = tournament as { id: number; name: string; courseName?: string | null; startDate: string; endDate: string; status: string; notes?: string | null; winnerId?: number | null; commissionerUserId?: number | null; visibility?: string; joinMode?: string } | undefined;
 
   const { data: tournamentConfig } = useGetTournamentConfig(id, {
     query: { queryKey: getGetTournamentConfigQueryKey(id), enabled: !isNaN(id) },
@@ -696,6 +696,7 @@ export default function TournamentDetailPage() {
           <ParticipantsTab
             tournamentId={id}
             userId={user?.id ?? null}
+            commissionerUserId={t?.commissionerUserId ?? null}
           />
         )}
 
@@ -709,6 +710,7 @@ export default function TournamentDetailPage() {
             updateConfigMutation={updateConfigMutation}
             setPositionPointsMutation={setPositionPointsMutation}
             updateTournamentMutation={updateMutation}
+            userId={user?.id ?? null}
             onSaved={() => { invalidateConfig(); invalidatePositionPoints(); queryClient.invalidateQueries({ queryKey: getGetTournamentQueryKey(id) }); }}
             onDeleteTournament={async () => {
               const res = await fetch(`/api/tournaments/${id}`, { method: "DELETE" });
@@ -1191,7 +1193,7 @@ async function participantsFetch<T>(path: string, method = "GET", body?: unknown
   return res.json() as Promise<T>;
 }
 
-function ParticipantsTab({ tournamentId, userId }: { tournamentId: number; userId: number | null }) {
+function ParticipantsTab({ tournamentId, userId, commissionerUserId }: { tournamentId: number; userId: number | null; commissionerUserId: number | null }) {
   const { toast } = useToast();
   const qk = ["participants", tournamentId];
 
@@ -1277,6 +1279,7 @@ function ParticipantsTab({ tournamentId, userId }: { tournamentId: number; userI
   }
 
   const { participants, myParticipant, isCommissioner, tournamentJoinMode } = data;
+  const isLegacyTournament = commissionerUserId === null;
 
   const joinedParticipants = participants.filter(p => p.status === "joined");
   const pendingParticipants = participants.filter(p => p.status === "invited" || p.status === "requested");
@@ -1291,8 +1294,16 @@ function ParticipantsTab({ tournamentId, userId }: { tournamentId: number; userI
 
   return (
     <div className="space-y-4">
+      {/* Legacy tournament notice */}
+      {isLegacyTournament && (
+        <div className="bg-muted/30 border border-border rounded-xl px-5 py-4">
+          <p className="text-sm text-muted-foreground font-medium">This is a legacy tournament created before participant management was added.</p>
+          <p className="text-xs text-muted-foreground mt-1">No commissioner is set — management controls are unavailable.</p>
+        </div>
+      )}
+
       {/* My status banner */}
-      {userId && !isCommissioner && myParticipant && myParticipant.status === "invited" && (
+      {userId && !isCommissioner && !isLegacyTournament && myParticipant && myParticipant.status === "invited" && (
         <div className="bg-yellow-900/20 border border-yellow-700/40 rounded-xl px-5 py-4 flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-yellow-300">You have a pending invitation to this tournament</p>
@@ -1308,17 +1319,42 @@ function ParticipantsTab({ tournamentId, userId }: { tournamentId: number; userI
       {userId && !isCommissioner && myParticipant && myParticipant.status === "joined" && (
         <div className="bg-card border border-card-border rounded-xl px-5 py-4 flex items-center justify-between gap-4">
           <p className="text-sm text-green-400 font-medium">You are a member of this tournament</p>
-          <Button size="sm" variant="outline" onClick={() => leave.mutate()} disabled={leave.isPending}>Leave</Button>
+          {!isLegacyTournament && (
+            <Button size="sm" variant="outline" onClick={() => leave.mutate()} disabled={leave.isPending}>Leave</Button>
+          )}
         </div>
       )}
 
-      {userId && !isCommissioner && !myParticipant && tournamentJoinMode === "approval_required" && (
+      {userId && !isCommissioner && !myParticipant && !isLegacyTournament && tournamentJoinMode === "open_join" && (
+        <div className="bg-card border border-card-border rounded-xl px-5 py-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm text-muted-foreground">This tournament is open to anyone</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Join now to participate in the draft</p>
+          </div>
+          <Button size="sm" onClick={() => requestJoin.mutate()} disabled={requestJoin.isPending}>Join Tournament</Button>
+        </div>
+      )}
+
+      {userId && !isCommissioner && !myParticipant && !isLegacyTournament && tournamentJoinMode === "approval_required" && (
         <div className="bg-card border border-card-border rounded-xl px-5 py-4 flex items-center justify-between gap-4">
           <div>
             <p className="text-sm text-muted-foreground">Request to join this tournament</p>
             <p className="text-xs text-muted-foreground mt-0.5">Commissioner will approve or reject</p>
           </div>
           <Button size="sm" onClick={() => requestJoin.mutate()} disabled={requestJoin.isPending}>Request to Join</Button>
+        </div>
+      )}
+
+      {userId && !isCommissioner && !myParticipant && !isLegacyTournament && tournamentJoinMode === "link_only" && (
+        <div className="bg-card border border-card-border rounded-xl px-5 py-4">
+          <p className="text-sm text-muted-foreground">This tournament requires an invite link to join.</p>
+          <p className="text-xs text-muted-foreground mt-1">Ask the commissioner for the invite link.</p>
+        </div>
+      )}
+
+      {userId && !isCommissioner && !myParticipant && !isLegacyTournament && tournamentJoinMode === "invite_only" && (
+        <div className="bg-card border border-card-border rounded-xl px-5 py-4">
+          <p className="text-sm text-muted-foreground">This tournament is invite-only. Wait for the commissioner to invite you.</p>
         </div>
       )}
 
@@ -1451,11 +1487,12 @@ function ConfigTab({
   updateConfigMutation,
   setPositionPointsMutation,
   updateTournamentMutation,
+  userId,
   onSaved,
   onDeleteTournament,
 }: {
   tournamentId: number;
-  tournament: { id: number; name: string; courseName?: string | null; startDate: string; endDate: string; notes?: string | null } | undefined;
+  tournament: { id: number; name: string; courseName?: string | null; startDate: string; endDate: string; status?: string; notes?: string | null; commissionerUserId?: number | null; visibility?: string; joinMode?: string } | undefined;
   config: {
     draftType: "alternate" | "snake";
     salaryCap: number; rosterSize: number; captainMultiplier: number;
@@ -1469,12 +1506,16 @@ function ConfigTab({
   updateConfigMutation: ReturnType<typeof useUpdateTournamentConfig>;
   setPositionPointsMutation: ReturnType<typeof useSetPositionPoints>;
   updateTournamentMutation: ReturnType<typeof useUpdateTournament>;
+  userId: number | null;
   onSaved: () => void;
   onDeleteTournament: () => Promise<void>;
 }) {
   const { toast } = useToast();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const isCommissioner = tournament?.commissionerUserId != null && userId === tournament.commissionerUserId;
+  const isDraftStatus = tournament?.status === "draft" || tournament?.status === undefined;
+
   type ConfigFields = {
     draftType: "alternate" | "snake";
     salaryCap: string; rosterSize: string; captainMultiplier: string;
@@ -1486,6 +1527,8 @@ function ConfigTab({
   };
   const [form, setForm] = useState<ConfigFields | null>(null);
   const [tournamentForm, setTournamentForm] = useState<{ name: string; courseName: string; startDate: string; endDate: string; notes: string } | null>(null);
+  const [accessForm, setAccessForm] = useState<{ visibility: string; joinMode: string } | null>(null);
+  const [accessSaving, setAccessSaving] = useState(false);
   const [posPoints, setPosPoints] = useState<{ position: number; points: string }[]>([]);
   const [posPointsDirty, setPosPointsDirty] = useState(false);
 
@@ -1524,6 +1567,15 @@ function ConfigTab({
       });
     }
   }, [tournament, tournamentForm]);
+
+  useEffect(() => {
+    if (tournament && !accessForm) {
+      setAccessForm({
+        visibility: tournament.visibility ?? "private",
+        joinMode: tournament.joinMode ?? "invite_only",
+      });
+    }
+  }, [tournament, accessForm]);
 
   useEffect(() => {
     if (positionPoints.length > 0 && posPoints.length === 0) {
@@ -1601,6 +1653,28 @@ function ConfigTab({
     );
   };
 
+  const handleSaveAccess = async () => {
+    if (!accessForm) return;
+    setAccessSaving(true);
+    try {
+      const res = await fetch(`/api/tournaments/${tournamentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visibility: accessForm.visibility, joinMode: accessForm.joinMode }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(d.error ?? `HTTP ${res.status}`);
+      }
+      onSaved();
+      toast({ title: "Access settings saved!" });
+    } catch (err) {
+      toast({ title: "Save failed", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setAccessSaving(false);
+    }
+  };
+
   const handleSavePositionPoints = () => {
     setPositionPointsMutation.mutate(
       { id: tournamentId, data: { points: posPoints.map(p => ({ position: p.position, points: Number(p.points) })) } },
@@ -1644,6 +1718,65 @@ function ConfigTab({
           </Button>
         </div>
       </div>
+
+      {/* Access Settings — commissioner only, only in draft status */}
+      {isCommissioner && isDraftStatus && accessForm && (
+        <div className="bg-card border border-card-border rounded-xl p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-foreground text-sm uppercase tracking-wide text-muted-foreground">Access Settings</h2>
+            <span className="text-xs text-muted-foreground border border-border rounded px-2 py-0.5">Commissioner only</span>
+          </div>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground font-medium">Visibility</label>
+              <div className="flex gap-3">
+                {([
+                  { value: "private", label: "Private", desc: "Only invited members can see it" },
+                  { value: "public", label: "Public", desc: "Anyone can discover it" },
+                ] as const).map(({ value, label, desc }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setAccessForm(f => f ? { ...f, visibility: value } : f)}
+                    data-testid={`visibility-${value}`}
+                    className={`flex-1 py-2.5 px-4 rounded-lg border text-sm text-left transition-all ${accessForm.visibility === value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}
+                  >
+                    <div className="font-medium">{label}</div>
+                    <div className="text-xs opacity-75 mt-0.5">{desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground font-medium">Join Mode</label>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { value: "invite_only", label: "Invite Only", desc: "Commissioner invites each player" },
+                  { value: "approval_required", label: "Approval Required", desc: "Players request; commissioner approves" },
+                  { value: "open_join", label: "Open Join", desc: "Anyone can join immediately" },
+                  { value: "link_only", label: "Link Only", desc: "Join via secret invite link" },
+                ] as const).map(({ value, label, desc }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setAccessForm(f => f ? { ...f, joinMode: value } : f)}
+                    data-testid={`join-mode-${value}`}
+                    className={`py-2.5 px-4 rounded-lg border text-sm text-left transition-all ${accessForm.joinMode === value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}
+                  >
+                    <div className="font-medium">{label}</div>
+                    <div className="text-xs opacity-75 mt-0.5">{desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end pt-1">
+            <Button size="sm" onClick={handleSaveAccess} disabled={accessSaving} data-testid="button-save-access">
+              {accessSaving ? "Saving..." : "Save Access Settings"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Salary & Roster */}
       <div className="bg-card border border-card-border rounded-xl p-6 space-y-5">

@@ -151,13 +151,20 @@ router.post("/tournaments/:id/invite", asyncHandler(async (req, res): Promise<vo
   const tournament = await getTournamentOrThrow(tournamentId);
   assertCommissioner(tournament, userId);
 
-  const body = zod.object({ username: zod.string().min(1) }).safeParse(req.body);
-  if (!body.success) throw new BadRequestError("username is required");
+  const body = zod.object({
+    username: zod.string().min(1).optional(),
+    userId: zod.number().int().positive().optional(),
+  }).refine(d => d.username || d.userId, { message: "Either username or userId is required" }).safeParse(req.body);
+  if (!body.success) throw new BadRequestError(body.error.issues[0]?.message ?? "username or userId required");
 
-  const [targetUser] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.username, body.data.username.toLowerCase()));
+  let targetUser: typeof usersTable.$inferSelect | undefined;
+  if (body.data.userId) {
+    const rows = await db.select().from(usersTable).where(eq(usersTable.id, body.data.userId));
+    targetUser = rows[0];
+  } else if (body.data.username) {
+    const rows = await db.select().from(usersTable).where(eq(usersTable.username, body.data.username.toLowerCase()));
+    targetUser = rows[0];
+  }
   if (!targetUser) throw new BadRequestError("User not found");
 
   const participant = await createInvitedParticipant(tournamentId, targetUser.id, userId);

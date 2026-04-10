@@ -1,5 +1,4 @@
 import { Router, type IRouter } from "express";
-import * as zod from "zod";
 import { db, tournamentsTable, tournamentConfigsTable, tournamentPositionPointsTable, fantasyTeamsTable, tournamentGolfersTable, usersTable, tournamentParticipantsTable } from "@workspace/db";
 import { eq, or, inArray } from "drizzle-orm";
 import {
@@ -11,6 +10,8 @@ import {
   UpdateTournamentConfigParams,
   GetPositionPointsParams,
   SetPositionPointsParams,
+  CreateTournamentBody as GeneratedCreateTournamentBody,
+  UpdateTournamentBody as GeneratedUpdateTournamentBody,
   CreateTournamentAccessBody,
   UpdateTournamentAccessBody,
 } from "@workspace/api-zod";
@@ -24,45 +25,8 @@ function parseId(raw: string | string[]): number {
   return parseInt(Array.isArray(raw) ? raw[0] : raw, 10);
 }
 
-const CreateTournamentBody = zod.object({
-  name: zod.string().min(1),
-  courseName: zod.string().nullable().optional(),
-  startDate: zod.string().min(1),
-  endDate: zod.string().min(1),
-  notes: zod.string().nullable().optional(),
-  config: zod.object({
-    draftType: zod.enum(["alternate", "snake"]).optional(),
-    salaryCap: zod.number().optional(),
-    rosterSize: zod.number().optional(),
-    captainMultiplier: zod.number().optional(),
-    birdiePoints: zod.number().optional(),
-    eaglePoints: zod.number().optional(),
-    bogeyPenalty: zod.number().optional(),
-    missedCutPenalty: zod.number().optional(),
-    replacementTopRankLockout: zod.number().optional(),
-    requireAmerican: zod.boolean().optional(),
-    requireEuropean: zod.boolean().optional(),
-    requireRow: zod.boolean().optional(),
-    requireOutsideTop30: zod.boolean().optional(),
-    salaryMin: zod.number().optional(),
-    salaryMax: zod.number().optional(),
-    scoringPlaces: zod.number().optional(),
-    firstPlacePoints: zod.number().optional(),
-  }).optional(),
-  visibility: zod.enum(["public", "private"]).optional().default("private"),
-  joinMode: zod.enum(["open_join", "approval_required", "invite_only", "link_only"]).optional().default("invite_only"),
-});
-
-const UpdateTournamentBody = zod.object({
-  name: zod.string().optional(),
-  courseName: zod.string().nullable().optional(),
-  startDate: zod.string().optional(),
-  endDate: zod.string().optional(),
-  status: zod.enum(["draft", "live", "completed"]).optional(),
-  notes: zod.string().nullable().optional(),
-  visibility: zod.enum(["public", "private"]).optional(),
-  joinMode: zod.enum(["open_join", "approval_required", "invite_only", "link_only"]).optional(),
-});
+const CreateTournamentBody = GeneratedCreateTournamentBody.merge(CreateTournamentAccessBody);
+const UpdateTournamentBody = GeneratedUpdateTournamentBody.merge(UpdateTournamentAccessBody);
 
 function formatTournament(t: typeof tournamentsTable.$inferSelect) {
   return {
