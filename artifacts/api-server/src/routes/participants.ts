@@ -271,9 +271,7 @@ router.post("/tournaments/:id/invite-link", asyncHandler(async (req, res): Promi
     .set({ inviteLinkToken: token, inviteLinkEnabled: true })
     .where(eq(tournamentsTable.id, tournamentId));
 
-  const origin = (req.headers.origin as string | undefined) ?? `${req.protocol}://${req.get("host")}`;
-  const link = `${origin}/tournaments/${tournamentId}?invite=${token}`;
-  res.json({ token, enabled: true, link });
+  res.json({ token, enabled: true });
 }));
 
 export default router;

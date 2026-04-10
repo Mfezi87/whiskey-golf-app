@@ -69,7 +69,7 @@ export default function TournamentDetailPage() {
   const tournamentDetailUrl = pageInviteToken
     ? `/api/tournaments/${id}?invite=${encodeURIComponent(pageInviteToken)}`
     : `/api/tournaments/${id}`;
-  const { data: tournament, isLoading: tLoading } = useGetTournament(id, {
+  const { data: tournament, isLoading: tLoading, error: tError } = useGetTournament(id, {
     query: {
       queryKey: [...getGetTournamentQueryKey(id), pageInviteToken ?? ""],
       enabled: !isNaN(id),
@@ -324,7 +324,20 @@ export default function TournamentDetailPage() {
   }
 
   if (!t) {
-    return <Layout><div className="p-8 text-muted-foreground">Tournament not found</div></Layout>;
+    const errMsg = tError instanceof Error ? tError.message : null;
+    const isAccessDenied = errMsg && (errMsg.toLowerCase().includes("access") || errMsg.toLowerCase().includes("unauthorized") || errMsg.includes("401") || errMsg.includes("403"));
+    return (
+      <Layout>
+        <div className="p-8 space-y-2">
+          <p className="text-muted-foreground">
+            {isAccessDenied ? "You don't have access to this tournament." : errMsg ? `Error: ${errMsg}` : "Tournament not found."}
+          </p>
+          {isAccessDenied && (
+            <p className="text-sm text-muted-foreground">If you have an invite link, use it to join first.</p>
+          )}
+        </div>
+      </Layout>
+    );
   }
 
   return (
@@ -1280,16 +1293,21 @@ function ParticipantsTab({ tournamentId, userId, commissionerUserId }: { tournam
 
   const joinViaLink = useMutation({
     mutationFn: (token: string) => participantsFetch(`/api/tournaments/${tournamentId}/join-via-link`, "POST", { token }),
-    onSuccess: () => { toast({ title: "You've joined via invite link!" }); invalidate(); },
+    onSuccess: () => {
+      window.history.replaceState(null, "", window.location.pathname);
+      toast({ title: "You've joined via invite link!" });
+      invalidate();
+    },
     onError: (err: Error) => toast({ title: "Invalid or expired link", description: err.message, variant: "destructive" }),
   });
 
   const generateLink = useMutation({
-    mutationFn: () => participantsFetch<{ token: string; enabled: boolean; link: string }>(`/api/tournaments/${tournamentId}/invite-link`, "POST"),
+    mutationFn: () => participantsFetch<{ token: string; enabled: boolean }>(`/api/tournaments/${tournamentId}/invite-link`, "POST"),
     onSuccess: (d) => {
-      const data = d as { token: string; enabled: boolean; link: string };
-      navigator.clipboard.writeText(data.link).catch(() => {});
-      toast({ title: "Invite link copied!", description: data.link });
+      const data = d as { token: string; enabled: boolean };
+      const link = `${window.location.origin}/tournaments/${tournamentId}?invite=${encodeURIComponent(data.token)}`;
+      navigator.clipboard.writeText(link).catch(() => {});
+      toast({ title: "Invite link copied!", description: link });
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
