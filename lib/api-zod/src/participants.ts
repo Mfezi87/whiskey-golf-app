@@ -40,8 +40,14 @@ export const ParticipantListResponse = zod.object({
   participants: zod.array(ParticipantRecord),
   myParticipant: ParticipantRecord.nullable(),
   isCommissioner: zod.boolean(),
+  tournamentJoinMode: TournamentJoinMode,
+  tournamentVisibility: TournamentVisibility,
+  commissionerUserId: zod.number().nullable(),
 });
 export type ParticipantListResponse = zod.infer<typeof ParticipantListResponse>;
+
+export const RequestJoinBody = zod.object({});
+export type RequestJoinBody = zod.infer<typeof RequestJoinBody>;
 
 export const JoinViaLinkBody = zod.object({
   token: zod.string().min(1),
@@ -49,12 +55,19 @@ export const JoinViaLinkBody = zod.object({
 export type JoinViaLinkBody = zod.infer<typeof JoinViaLinkBody>;
 
 export const InviteParticipantBody = zod.object({
-  username: zod.string().min(1),
-});
+  username: zod.string().min(1).optional(),
+  userId: zod.number().int().positive().optional(),
+}).refine(d => d.username || d.userId, { message: "Either username or userId is required" });
 export type InviteParticipantBody = zod.infer<typeof InviteParticipantBody>;
+
+export const ParticipantIdParam = zod.object({
+  participantId: zod.coerce.number().int().positive(),
+});
+export type ParticipantIdParam = zod.infer<typeof ParticipantIdParam>;
 
 export const InviteLinkResponse = zod.object({
   token: zod.string(),
   enabled: zod.boolean(),
+  link: zod.string(),
 });
 export type InviteLinkResponse = zod.infer<typeof InviteLinkResponse>;

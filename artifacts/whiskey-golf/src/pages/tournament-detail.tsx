@@ -1196,6 +1196,7 @@ async function participantsFetch<T>(path: string, method = "GET", body?: unknown
 function ParticipantsTab({ tournamentId, userId, commissionerUserId }: { tournamentId: number; userId: number | null; commissionerUserId: number | null }) {
   const { toast } = useToast();
   const qk = ["participants", tournamentId];
+  const inviteToken = new URLSearchParams(window.location.search).get("invite");
 
   const { data, isLoading, refetch } = useQuery<ParticipantsResponse>({
     queryKey: qk,
@@ -1254,6 +1255,18 @@ function ParticipantsTab({ tournamentId, userId, commissionerUserId }: { tournam
     mutationFn: () => participantsFetch(`/api/tournaments/${tournamentId}/request-join`, "POST"),
     onSuccess: () => { toast({ title: "Join request sent!" }); invalidate(); },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const openJoin = useMutation({
+    mutationFn: () => participantsFetch(`/api/tournaments/${tournamentId}/join`, "POST"),
+    onSuccess: () => { toast({ title: "You've joined the tournament!" }); invalidate(); },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const joinViaLink = useMutation({
+    mutationFn: (token: string) => participantsFetch(`/api/tournaments/${tournamentId}/join-via-link`, "POST", { token }),
+    onSuccess: () => { toast({ title: "You've joined via invite link!" }); invalidate(); },
+    onError: (err: Error) => toast({ title: "Invalid or expired link", description: err.message, variant: "destructive" }),
   });
 
   const generateLink = useMutation({
@@ -1331,7 +1344,7 @@ function ParticipantsTab({ tournamentId, userId, commissionerUserId }: { tournam
             <p className="text-sm text-muted-foreground">This tournament is open to anyone</p>
             <p className="text-xs text-muted-foreground mt-0.5">Join now to participate in the draft</p>
           </div>
-          <Button size="sm" onClick={() => requestJoin.mutate()} disabled={requestJoin.isPending}>Join Tournament</Button>
+          <Button size="sm" onClick={() => openJoin.mutate()} disabled={openJoin.isPending}>Join Tournament</Button>
         </div>
       )}
 
@@ -1346,9 +1359,23 @@ function ParticipantsTab({ tournamentId, userId, commissionerUserId }: { tournam
       )}
 
       {userId && !isCommissioner && !myParticipant && !isLegacyTournament && tournamentJoinMode === "link_only" && (
-        <div className="bg-card border border-card-border rounded-xl px-5 py-4">
-          <p className="text-sm text-muted-foreground">This tournament requires an invite link to join.</p>
-          <p className="text-xs text-muted-foreground mt-1">Ask the commissioner for the invite link.</p>
+        <div className="bg-card border border-card-border rounded-xl px-5 py-4 space-y-3">
+          {inviteToken ? (
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">You have an invite link for this tournament</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Click to join using your invite link</p>
+              </div>
+              <Button size="sm" onClick={() => joinViaLink.mutate(inviteToken)} disabled={joinViaLink.isPending}>
+                {joinViaLink.isPending ? "Joining..." : "Join via Link"}
+              </Button>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">This tournament requires an invite link to join.</p>
+              <p className="text-xs text-muted-foreground">Ask the commissioner for the invite link.</p>
+            </>
+          )}
         </div>
       )}
 

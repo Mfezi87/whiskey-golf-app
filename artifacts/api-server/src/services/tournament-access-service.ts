@@ -60,7 +60,11 @@ export async function getParticipantForUser(tournamentId: number, userId: number
   const [participant] = await db
     .select()
     .from(tournamentParticipantsTable)
-    .where(eq(tournamentParticipantsTable.tournamentId, tournamentId))
-    .then((rows) => rows.filter((r) => r.userId === userId));
+    .where(
+      and(
+        eq(tournamentParticipantsTable.tournamentId, tournamentId),
+        eq(tournamentParticipantsTable.userId, userId),
+      ),
+    );
   return participant ?? null;
 }

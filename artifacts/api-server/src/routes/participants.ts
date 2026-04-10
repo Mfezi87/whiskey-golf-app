@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import * as zod from "zod";
 import { db, tournamentsTable, usersTable, tournamentParticipantsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { asyncHandler } from "../middlewares/error-handler";
 import { BadRequestError, UnauthorizedError } from "../lib/http-errors";
 import {
@@ -9,6 +9,7 @@ import {
   assertCommissioner,
   assertJoinModeAllows,
   validateInviteLinkToken,
+  canViewTournament,
 } from "../services/tournament-access-service";
 import {
   getParticipant,
@@ -57,7 +58,7 @@ async function formatParticipant(p: typeof tournamentParticipantsTable.$inferSel
 async function formatParticipants(rows: (typeof tournamentParticipantsTable.$inferSelect)[]) {
   const userIds = [...new Set(rows.map((r) => r.userId))];
   const users = userIds.length > 0
-    ? await db.select().from(usersTable).then((all) => all.filter((u) => userIds.includes(u.id)))
+    ? await db.select().from(usersTable).where(inArray(usersTable.id, userIds))
     : [];
   const userMap = new Map(users.map((u) => [u.id, u]));
 
@@ -85,6 +86,13 @@ router.get("/tournaments/:id/participants", asyncHandler(async (req, res): Promi
 
   const tournament = await getTournamentOrThrow(tournamentId);
   const isCommissioner = userId !== null && tournament.commissionerUserId === userId;
+
+  if (!isCommissioner) {
+    const allowed = await canViewTournament(tournament, userId);
+    if (!allowed) {
+      throw new UnauthorizedError("You do not have access to this tournament");
+    }
+  }
 
   const allParticipants = await getAllParticipants(tournamentId);
 
