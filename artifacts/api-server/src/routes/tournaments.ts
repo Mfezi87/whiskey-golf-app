@@ -1,9 +1,8 @@
 import { Router, type IRouter } from "express";
-import { db, tournamentsTable, tournamentConfigsTable, tournamentPositionPointsTable, fantasyTeamsTable, tournamentGolfersTable, usersTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import * as zod from "zod";
+import { db, tournamentsTable, tournamentConfigsTable, tournamentPositionPointsTable, fantasyTeamsTable, tournamentGolfersTable, usersTable, tournamentParticipantsTable } from "@workspace/db";
+import { eq, or, inArray } from "drizzle-orm";
 import {
-  CreateTournamentBody,
-  UpdateTournamentBody,
   UpdateTournamentConfigBody,
   SetPositionPointsBody,
   GetTournamentParams,
@@ -12,13 +11,58 @@ import {
   UpdateTournamentConfigParams,
   GetPositionPointsParams,
   SetPositionPointsParams,
+  CreateTournamentAccessBody,
+  UpdateTournamentAccessBody,
 } from "@workspace/api-zod";
+import { asyncHandler } from "../middlewares/error-handler";
+import { BadRequestError, UnauthorizedError } from "../lib/http-errors";
+import { assertCommissioner, getTournamentOrThrow } from "../services/tournament-access-service";
 
 const router: IRouter = Router();
 
 function parseId(raw: string | string[]): number {
   return parseInt(Array.isArray(raw) ? raw[0] : raw, 10);
 }
+
+const CreateTournamentBody = zod.object({
+  name: zod.string().min(1),
+  courseName: zod.string().nullable().optional(),
+  startDate: zod.string().min(1),
+  endDate: zod.string().min(1),
+  notes: zod.string().nullable().optional(),
+  config: zod.object({
+    draftType: zod.enum(["alternate", "snake"]).optional(),
+    salaryCap: zod.number().optional(),
+    rosterSize: zod.number().optional(),
+    captainMultiplier: zod.number().optional(),
+    birdiePoints: zod.number().optional(),
+    eaglePoints: zod.number().optional(),
+    bogeyPenalty: zod.number().optional(),
+    missedCutPenalty: zod.number().optional(),
+    replacementTopRankLockout: zod.number().optional(),
+    requireAmerican: zod.boolean().optional(),
+    requireEuropean: zod.boolean().optional(),
+    requireRow: zod.boolean().optional(),
+    requireOutsideTop30: zod.boolean().optional(),
+    salaryMin: zod.number().optional(),
+    salaryMax: zod.number().optional(),
+    scoringPlaces: zod.number().optional(),
+    firstPlacePoints: zod.number().optional(),
+  }).optional(),
+  visibility: zod.enum(["public", "private"]).optional().default("private"),
+  joinMode: zod.enum(["open_join", "approval_required", "invite_only", "link_only"]).optional().default("invite_only"),
+});
+
+const UpdateTournamentBody = zod.object({
+  name: zod.string().optional(),
+  courseName: zod.string().nullable().optional(),
+  startDate: zod.string().optional(),
+  endDate: zod.string().optional(),
+  status: zod.enum(["draft", "live", "completed"]).optional(),
+  notes: zod.string().nullable().optional(),
+  visibility: zod.enum(["public", "private"]).optional(),
+  joinMode: zod.enum(["open_join", "approval_required", "invite_only", "link_only"]).optional(),
+});
 
 function formatTournament(t: typeof tournamentsTable.$inferSelect) {
   return {
@@ -32,6 +76,10 @@ function formatTournament(t: typeof tournamentsTable.$inferSelect) {
     winnerId: t.winnerId ?? null,
     createdAt: t.createdAt.toISOString(),
     completedAt: t.completedAt ? t.completedAt.toISOString() : null,
+    commissionerUserId: t.commissionerUserId ?? null,
+    visibility: t.visibility,
+    joinMode: t.joinMode,
+    inviteLinkEnabled: t.inviteLinkEnabled,
   };
 }
 
@@ -59,21 +107,72 @@ function formatConfig(c: typeof tournamentConfigsTable.$inferSelect) {
   };
 }
 
-router.get("/tournaments", async (_req, res): Promise<void> => {
-  const tournaments = await db.select().from(tournamentsTable).orderBy(tournamentsTable.createdAt);
-  res.json(tournaments.map(formatTournament));
-});
+router.get("/tournaments", asyncHandler(async (req, res): Promise<void> => {
+  const userId: number | null = (req.session as { userId?: number }).userId ?? null;
 
-router.post("/tournaments", async (req, res): Promise<void> => {
+  let tournaments: (typeof tournamentsTable.$inferSelect)[];
+
+  if (userId) {
+    const myParticipations = await db
+      .select({ tournamentId: tournamentParticipantsTable.tournamentId })
+      .from(tournamentParticipantsTable)
+      .where(eq(tournamentParticipantsTable.userId, userId));
+
+    const myTournamentIds = myParticipations.map((p) => p.tournamentId);
+
+    if (myTournamentIds.length > 0) {
+      tournaments = await db
+        .select()
+        .from(tournamentsTable)
+        .where(
+          or(
+            eq(tournamentsTable.visibility, "public"),
+            inArray(tournamentsTable.id, myTournamentIds),
+          ),
+        )
+        .orderBy(tournamentsTable.createdAt);
+    } else {
+      tournaments = await db
+        .select()
+        .from(tournamentsTable)
+        .where(eq(tournamentsTable.visibility, "public"))
+        .orderBy(tournamentsTable.createdAt);
+    }
+  } else {
+    tournaments = await db
+      .select()
+      .from(tournamentsTable)
+      .where(eq(tournamentsTable.visibility, "public"))
+      .orderBy(tournamentsTable.createdAt);
+  }
+
+  res.json(tournaments.map(formatTournament));
+}));
+
+router.post("/tournaments", asyncHandler(async (req, res): Promise<void> => {
+  const userId = (req.session as { userId?: number }).userId;
+  if (!userId) throw new UnauthorizedError("Must be logged in to create a tournament");
+
   const parsed = CreateTournamentBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
+    throw new BadRequestError("Invalid tournament data", parsed.error.flatten());
   }
-  const { name, courseName, startDate, endDate, notes, config } = parsed.data;
-  const [tournament] = await db.insert(tournamentsTable).values({ name, courseName, startDate, endDate, notes }).returning();
+  const { name, courseName, startDate, endDate, notes, config, visibility, joinMode } = parsed.data;
 
-  // Create default config
+  const [tournament] = await db
+    .insert(tournamentsTable)
+    .values({
+      name,
+      courseName,
+      startDate,
+      endDate,
+      notes,
+      commissionerUserId: userId,
+      visibility: visibility ?? "private",
+      joinMode: joinMode ?? "invite_only",
+    })
+    .returning();
+
   const configValues = {
     tournamentId: tournament.id,
     draftType: config?.draftType ?? "alternate",
@@ -96,27 +195,32 @@ router.post("/tournaments", async (req, res): Promise<void> => {
   };
   await db.insert(tournamentConfigsTable).values(configValues);
 
-  // Generate default position points
   const pts = generatePositionPoints(configValues.scoringPlaces, configValues.firstPlacePoints);
   if (pts.length > 0) {
-    await db.insert(tournamentPositionPointsTable).values(pts.map(p => ({ tournamentId: tournament.id, position: p.position, points: String(p.points) })));
+    await db.insert(tournamentPositionPointsTable).values(
+      pts.map((p) => ({ tournamentId: tournament.id, position: p.position, points: String(p.points) })),
+    );
   }
 
   res.status(201).json(formatTournament(tournament));
-});
+}));
 
-router.get("/tournaments/:id", async (req, res): Promise<void> => {
+router.get("/tournaments/:id", asyncHandler(async (req, res): Promise<void> => {
   const params = GetTournamentParams.safeParse({ id: parseId(req.params.id) });
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) throw new BadRequestError("Invalid tournament id");
 
   const [tournament] = await db.select().from(tournamentsTable).where(eq(tournamentsTable.id, params.data.id));
   if (!tournament) { res.status(404).json({ error: "Tournament not found" }); return; }
 
   const [config] = await db.select().from(tournamentConfigsTable).where(eq(tournamentConfigsTable.tournamentId, tournament.id));
   const golfers = await db.select().from(tournamentGolfersTable).where(eq(tournamentGolfersTable.tournamentId, tournament.id)).orderBy(tournamentGolfersTable.marketRank);
-  const teams = await db.select({ team: fantasyTeamsTable, user: usersTable }).from(fantasyTeamsTable).innerJoin(usersTable, eq(fantasyTeamsTable.userId, usersTable.id)).where(eq(fantasyTeamsTable.tournamentId, tournament.id));
+  const teams = await db
+    .select({ team: fantasyTeamsTable, user: usersTable })
+    .from(fantasyTeamsTable)
+    .innerJoin(usersTable, eq(fantasyTeamsTable.userId, usersTable.id))
+    .where(eq(fantasyTeamsTable.tournamentId, tournament.id));
 
-  const formattedGolfers = golfers.map(g => ({
+  const formattedGolfers = golfers.map((g) => ({
     id: g.id, tournamentId: g.tournamentId, golferName: g.golferName, nationality: g.nationality,
     region: g.region as "EU" | "US" | "ROW", avgOdds: g.avgOdds ? Number(g.avgOdds) : null,
     worldRanking: g.worldRanking, marketRank: g.marketRank, salary: g.salary,
@@ -136,40 +240,64 @@ router.get("/tournaments/:id", async (req, res): Promise<void> => {
     golfers: formattedGolfers,
     teams: formattedTeams,
   });
-});
+}));
 
-router.delete("/tournaments/:id", async (req, res): Promise<void> => {
+router.delete("/tournaments/:id", asyncHandler(async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid tournament id" }); return; }
+  if (isNaN(id)) throw new BadRequestError("Invalid tournament id");
   const [deleted] = await db.delete(tournamentsTable).where(eq(tournamentsTable.id, id)).returning();
   if (!deleted) { res.status(404).json({ error: "Tournament not found" }); return; }
   res.json({ ok: true });
-});
+}));
 
-router.patch("/tournaments/:id", async (req, res): Promise<void> => {
+router.patch("/tournaments/:id", asyncHandler(async (req, res): Promise<void> => {
   const params = UpdateTournamentParams.safeParse({ id: parseId(req.params.id) });
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) throw new BadRequestError("Invalid tournament id");
+
   const body = UpdateTournamentBody.safeParse(req.body);
-  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  if (!body.success) throw new BadRequestError("Invalid update data", body.error.flatten());
 
-  const [tournament] = await db.update(tournamentsTable).set(body.data).where(eq(tournamentsTable.id, params.data.id)).returning();
-  if (!tournament) { res.status(404).json({ error: "Tournament not found" }); return; }
-  res.json(formatTournament(tournament));
-});
+  const userId = (req.session as { userId?: number }).userId;
 
-router.get("/tournaments/:id/config", async (req, res): Promise<void> => {
+  const tournament = await getTournamentOrThrow(params.data.id);
+
+  const isChangingAccess = body.data.visibility !== undefined || body.data.joinMode !== undefined;
+  if (isChangingAccess) {
+    if (!userId) throw new UnauthorizedError("Must be logged in");
+    assertCommissioner(tournament, userId);
+    if (tournament.status !== "draft") {
+      throw new BadRequestError("Cannot change visibility or join mode after tournament has started");
+    }
+  }
+
+  const updateData: Record<string, unknown> = {};
+  if (body.data.name !== undefined) updateData.name = body.data.name;
+  if (body.data.courseName !== undefined) updateData.courseName = body.data.courseName;
+  if (body.data.startDate !== undefined) updateData.startDate = body.data.startDate;
+  if (body.data.endDate !== undefined) updateData.endDate = body.data.endDate;
+  if (body.data.status !== undefined) updateData.status = body.data.status;
+  if (body.data.notes !== undefined) updateData.notes = body.data.notes;
+  if (body.data.visibility !== undefined) updateData.visibility = body.data.visibility;
+  if (body.data.joinMode !== undefined) updateData.joinMode = body.data.joinMode;
+
+  const [updated] = await db.update(tournamentsTable).set(updateData).where(eq(tournamentsTable.id, params.data.id)).returning();
+  if (!updated) { res.status(404).json({ error: "Tournament not found" }); return; }
+  res.json(formatTournament(updated));
+}));
+
+router.get("/tournaments/:id/config", asyncHandler(async (req, res): Promise<void> => {
   const params = GetTournamentConfigParams.safeParse({ id: parseId(req.params.id) });
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) throw new BadRequestError("Invalid tournament id");
   const [config] = await db.select().from(tournamentConfigsTable).where(eq(tournamentConfigsTable.tournamentId, params.data.id));
   if (!config) { res.status(404).json({ error: "Config not found" }); return; }
   res.json(formatConfig(config));
-});
+}));
 
-router.patch("/tournaments/:id/config", async (req, res): Promise<void> => {
+router.patch("/tournaments/:id/config", asyncHandler(async (req, res): Promise<void> => {
   const params = UpdateTournamentConfigParams.safeParse({ id: parseId(req.params.id) });
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) throw new BadRequestError("Invalid tournament id");
   const body = UpdateTournamentConfigBody.safeParse(req.body);
-  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  if (!body.success) throw new BadRequestError("Invalid config data", body.error.flatten());
 
   const updateData: Record<string, unknown> = {};
   if (body.data.draftType !== undefined) updateData.draftType = body.data.draftType;
@@ -193,37 +321,38 @@ router.patch("/tournaments/:id/config", async (req, res): Promise<void> => {
   const [config] = await db.update(tournamentConfigsTable).set(updateData).where(eq(tournamentConfigsTable.tournamentId, params.data.id)).returning();
   if (!config) { res.status(404).json({ error: "Config not found" }); return; }
   res.json(formatConfig(config));
-});
+}));
 
-router.get("/tournaments/:id/position-points", async (req, res): Promise<void> => {
+router.get("/tournaments/:id/position-points", asyncHandler(async (req, res): Promise<void> => {
   const params = GetPositionPointsParams.safeParse({ id: parseId(req.params.id) });
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) throw new BadRequestError("Invalid tournament id");
   const pts = await db.select().from(tournamentPositionPointsTable).where(eq(tournamentPositionPointsTable.tournamentId, params.data.id)).orderBy(tournamentPositionPointsTable.position);
-  res.json(pts.map(p => ({ position: p.position, points: Number(p.points) })));
-});
+  res.json(pts.map((p) => ({ position: p.position, points: Number(p.points) })));
+}));
 
-router.post("/tournaments/:id/position-points", async (req, res): Promise<void> => {
+router.post("/tournaments/:id/position-points", asyncHandler(async (req, res): Promise<void> => {
   const params = SetPositionPointsParams.safeParse({ id: parseId(req.params.id) });
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) throw new BadRequestError("Invalid tournament id");
   const body = SetPositionPointsBody.safeParse(req.body);
-  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  if (!body.success) throw new BadRequestError("Invalid position points data", body.error.flatten());
 
   await db.delete(tournamentPositionPointsTable).where(eq(tournamentPositionPointsTable.tournamentId, params.data.id));
   if (body.data.points.length > 0) {
-    await db.insert(tournamentPositionPointsTable).values(body.data.points.map(p => ({
-      tournamentId: params.data.id,
-      position: p.position,
-      points: String(p.points),
-    })));
+    await db.insert(tournamentPositionPointsTable).values(
+      body.data.points.map((p) => ({
+        tournamentId: params.data.id,
+        position: p.position,
+        points: String(p.points),
+      })),
+    );
   }
   const pts = await db.select().from(tournamentPositionPointsTable).where(eq(tournamentPositionPointsTable.tournamentId, params.data.id)).orderBy(tournamentPositionPointsTable.position);
-  res.json(pts.map(p => ({ position: p.position, points: Number(p.points) })));
-});
+  res.json(pts.map((p) => ({ position: p.position, points: Number(p.points) })));
+}));
 
 function generatePositionPoints(scoringPlaces: number, firstPlacePoints: number): { position: number; points: number }[] {
   const pts: { position: number; points: number }[] = [];
   for (let i = 1; i <= scoringPlaces; i++) {
-    // Exponential decay curve: more points at top, taper to 1
     const fraction = (i - 1) / (scoringPlaces - 1);
     const points = Math.round((firstPlacePoints * Math.pow(1 - fraction, 1.5)) * 10) / 10;
     pts.push({ position: i, points: Math.max(points, 1) });

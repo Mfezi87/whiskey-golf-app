@@ -14,6 +14,11 @@ export const tournamentsTable = pgTable("tournaments", {
   winnerId: integer("winner_id").references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  commissionerUserId: integer("commissioner_user_id").references(() => usersTable.id),
+  visibility: text("visibility").notNull().default("private"), // public | private
+  joinMode: text("join_mode").notNull().default("invite_only"), // open_join | approval_required | invite_only | link_only
+  inviteLinkToken: text("invite_link_token"),
+  inviteLinkEnabled: boolean("invite_link_enabled").notNull().default(false),
 });
 
 export const tournamentConfigsTable = pgTable("tournament_configs", {

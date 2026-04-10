@@ -29,7 +29,7 @@ import {
   getGetTournamentConfigQueryKey,
   getGetPositionPointsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/contexts/AuthContext";
@@ -38,7 +38,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, Upload, RefreshCw, Trophy, User, Star, Lock, CheckCircle2, Plus, Minus, AlertTriangle, Trash2 } from "lucide-react";
 import { useInterval } from "@/hooks/useInterval";
 
-type Tab = "golfers" | "draft" | "results" | "scores" | "settings";
+type Tab = "golfers" | "draft" | "results" | "scores" | "participants" | "settings";
 
 function StatusBadge({ status }: { status: string }) {
   const variants: Record<string, string> = {
@@ -293,6 +293,7 @@ export default function TournamentDetailPage() {
     { key: "draft", label: "Draft Room" },
     { key: "results", label: "Results" },
     { key: "scores", label: "Scores" },
+    { key: "participants", label: "Participants" },
     { key: "settings", label: "Settings" },
   ];
 
@@ -687,6 +688,14 @@ export default function TournamentDetailPage() {
             setEditState={setResultsEditState}
             repState={resultsRepState}
             setRepState={setResultsRepState}
+          />
+        )}
+
+        {/* PARTICIPANTS TAB */}
+        {tab === "participants" && (
+          <ParticipantsTab
+            tournamentId={id}
+            userId={user?.id ?? null}
           />
         )}
 
@@ -1118,6 +1127,318 @@ function ScoresTab({ scoreList }: {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+type ParticipantRecord = {
+  id: number;
+  tournamentId: number;
+  userId: number;
+  username: string;
+  displayName: string;
+  status: string;
+  invitedByUserId: number | null;
+  respondedAt: string | null;
+  joinedAt: string | null;
+  removedAt: string | null;
+  createdAt: string;
+};
+
+type ParticipantsResponse = {
+  participants: ParticipantRecord[];
+  myParticipant: ParticipantRecord | null;
+  isCommissioner: boolean;
+  tournamentJoinMode: string;
+  tournamentVisibility: string;
+  commissionerUserId: number | null;
+};
+
+function statusLabel(status: string): string {
+  const map: Record<string, string> = {
+    invited: "Invited",
+    requested: "Requested",
+    joined: "Joined",
+    rejected: "Declined",
+    removed: "Removed",
+    left: "Left",
+  };
+  return map[status] ?? status;
+}
+
+function statusColor(status: string): string {
+  const map: Record<string, string> = {
+    invited: "text-yellow-400 bg-yellow-900/30 border-yellow-700/40",
+    requested: "text-blue-400 bg-blue-900/30 border-blue-700/40",
+    joined: "text-green-400 bg-green-900/30 border-green-700/40",
+    rejected: "text-muted-foreground bg-muted/30 border-muted/40",
+    removed: "text-red-400 bg-red-900/30 border-red-700/40",
+    left: "text-muted-foreground bg-muted/30 border-muted/40",
+  };
+  return map[status] ?? "text-muted-foreground";
+}
+
+async function participantsFetch<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(data.error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+function ParticipantsTab({ tournamentId, userId }: { tournamentId: number; userId: number | null }) {
+  const { toast } = useToast();
+  const qk = ["participants", tournamentId];
+
+  const { data, isLoading, refetch } = useQuery<ParticipantsResponse>({
+    queryKey: qk,
+    queryFn: () => participantsFetch<ParticipantsResponse>(`/api/tournaments/${tournamentId}/participants`),
+    retry: 1,
+  });
+
+  const [inviteUsername, setInviteUsername] = useState("");
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  const invalidate = () => { refetch(); };
+
+  const invite = useMutation({
+    mutationFn: (username: string) => participantsFetch(`/api/tournaments/${tournamentId}/invite`, "POST", { username }),
+    onSuccess: () => { toast({ title: "Invitation sent!" }); setInviteUsername(""); setInviteError(null); invalidate(); },
+    onError: (err: Error) => { setInviteError(err.message); },
+  });
+
+  const approve = useMutation({
+    mutationFn: (participantId: number) => participantsFetch(`/api/tournaments/${tournamentId}/participants/${participantId}/approve`, "POST"),
+    onSuccess: () => { toast({ title: "Approved!" }); invalidate(); },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const reject = useMutation({
+    mutationFn: (participantId: number) => participantsFetch(`/api/tournaments/${tournamentId}/participants/${participantId}/reject`, "POST"),
+    onSuccess: () => { toast({ title: "Rejected" }); invalidate(); },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const remove = useMutation({
+    mutationFn: (participantId: number) => participantsFetch(`/api/tournaments/${tournamentId}/participants/${participantId}/remove`, "POST"),
+    onSuccess: () => { toast({ title: "Removed from tournament" }); invalidate(); },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const accept = useMutation({
+    mutationFn: () => participantsFetch(`/api/tournaments/${tournamentId}/accept-invite`, "POST"),
+    onSuccess: () => { toast({ title: "You've joined the tournament!" }); invalidate(); },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const decline = useMutation({
+    mutationFn: () => participantsFetch(`/api/tournaments/${tournamentId}/decline-invite`, "POST"),
+    onSuccess: () => { toast({ title: "Invitation declined" }); invalidate(); },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const leave = useMutation({
+    mutationFn: () => participantsFetch(`/api/tournaments/${tournamentId}/leave`, "POST"),
+    onSuccess: () => { toast({ title: "You've left the tournament" }); invalidate(); },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const requestJoin = useMutation({
+    mutationFn: () => participantsFetch(`/api/tournaments/${tournamentId}/request-join`, "POST"),
+    onSuccess: () => { toast({ title: "Join request sent!" }); invalidate(); },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const generateLink = useMutation({
+    mutationFn: () => participantsFetch<{ token: string; enabled: boolean }>(`/api/tournaments/${tournamentId}/invite-link`, "POST"),
+    onSuccess: (d) => {
+      const link = `${window.location.origin}/tournaments/${tournamentId}?invite=${(d as { token: string }).token}`;
+      navigator.clipboard.writeText(link).catch(() => {});
+      toast({ title: "Invite link copied!", description: link });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-muted rounded-lg animate-pulse" />)}
+      </div>
+    );
+  }
+
+  if (!data) {
+    return <div className="text-center py-12 text-muted-foreground text-sm">Could not load participants</div>;
+  }
+
+  const { participants, myParticipant, isCommissioner, tournamentJoinMode } = data;
+
+  const joinedParticipants = participants.filter(p => p.status === "joined");
+  const pendingParticipants = participants.filter(p => p.status === "invited" || p.status === "requested");
+  const inactiveParticipants = participants.filter(p => ["rejected", "removed", "left"].includes(p.status));
+
+  const joinModeLabel: Record<string, string> = {
+    invite_only: "Invite Only",
+    approval_required: "Approval Required",
+    open_join: "Open Join",
+    link_only: "Link Only",
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* My status banner */}
+      {userId && !isCommissioner && myParticipant && myParticipant.status === "invited" && (
+        <div className="bg-yellow-900/20 border border-yellow-700/40 rounded-xl px-5 py-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-yellow-300">You have a pending invitation to this tournament</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Accept to join the draft</p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button size="sm" onClick={() => accept.mutate()} disabled={accept.isPending}>Accept</Button>
+            <Button size="sm" variant="outline" onClick={() => decline.mutate()} disabled={decline.isPending}>Decline</Button>
+          </div>
+        </div>
+      )}
+
+      {userId && !isCommissioner && myParticipant && myParticipant.status === "joined" && (
+        <div className="bg-card border border-card-border rounded-xl px-5 py-4 flex items-center justify-between gap-4">
+          <p className="text-sm text-green-400 font-medium">You are a member of this tournament</p>
+          <Button size="sm" variant="outline" onClick={() => leave.mutate()} disabled={leave.isPending}>Leave</Button>
+        </div>
+      )}
+
+      {userId && !isCommissioner && !myParticipant && tournamentJoinMode === "approval_required" && (
+        <div className="bg-card border border-card-border rounded-xl px-5 py-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm text-muted-foreground">Request to join this tournament</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Commissioner will approve or reject</p>
+          </div>
+          <Button size="sm" onClick={() => requestJoin.mutate()} disabled={requestJoin.isPending}>Request to Join</Button>
+        </div>
+      )}
+
+      {userId && !isCommissioner && myParticipant && myParticipant.status === "requested" && (
+        <div className="bg-blue-900/20 border border-blue-700/40 rounded-xl px-5 py-3">
+          <p className="text-sm text-blue-300 font-medium">Your join request is pending commissioner approval</p>
+        </div>
+      )}
+
+      {/* Commissioner: Invite panel */}
+      {isCommissioner && (
+        <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-foreground text-sm">Manage Participants</h2>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground px-2 py-1 rounded border border-border">
+                {joinModeLabel[tournamentJoinMode] ?? tournamentJoinMode}
+              </span>
+              {(tournamentJoinMode === "link_only" || tournamentJoinMode === "invite_only" || tournamentJoinMode === "approval_required") && (
+                <Button size="sm" variant="outline" onClick={() => generateLink.mutate()} disabled={generateLink.isPending}>
+                  Generate Invite Link
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Enter username to invite"
+              value={inviteUsername}
+              onChange={e => { setInviteUsername(e.target.value); setInviteError(null); }}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); invite.mutate(inviteUsername.trim()); } }}
+              className="h-9 text-sm flex-1"
+              data-testid="input-invite-username"
+            />
+            <Button size="sm" onClick={() => invite.mutate(inviteUsername.trim())} disabled={invite.isPending || !inviteUsername.trim()} data-testid="button-invite">
+              Invite
+            </Button>
+          </div>
+          {inviteError && <p className="text-xs text-destructive">{inviteError}</p>}
+        </div>
+      )}
+
+      {/* Pending participants (commissioner view) */}
+      {isCommissioner && pendingParticipants.length > 0 && (
+        <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-border">
+            <h3 className="text-sm font-semibold text-foreground">Pending ({pendingParticipants.length})</h3>
+          </div>
+          <div className="divide-y divide-border">
+            {pendingParticipants.map(p => (
+              <div key={p.id} className="px-5 py-3 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">{p.displayName || p.username}</p>
+                  <p className="text-xs text-muted-foreground">@{p.username}</p>
+                </div>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${statusColor(p.status)}`}>{statusLabel(p.status)}</span>
+                {p.status === "requested" && (
+                  <div className="flex gap-2 shrink-0">
+                    <Button size="sm" onClick={() => approve.mutate(p.id)} disabled={approve.isPending}>Approve</Button>
+                    <Button size="sm" variant="outline" onClick={() => reject.mutate(p.id)} disabled={reject.isPending}>Reject</Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Joined members */}
+      <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-border">
+          <h3 className="text-sm font-semibold text-foreground">Members ({joinedParticipants.length})</h3>
+        </div>
+        {joinedParticipants.length === 0 ? (
+          <div className="px-5 py-8 text-center">
+            <User className="w-7 h-7 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No members yet</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {joinedParticipants.map(p => (
+              <div key={p.id} className="px-5 py-3 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-bold shrink-0">
+                  {(p.displayName || p.username)[0]?.toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">{p.displayName || p.username}</p>
+                  <p className="text-xs text-muted-foreground">@{p.username}</p>
+                </div>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${statusColor(p.status)}`}>{statusLabel(p.status)}</span>
+                {isCommissioner && p.userId !== userId && (
+                  <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive shrink-0" onClick={() => remove.mutate(p.id)} disabled={remove.isPending}>
+                    Remove
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Inactive (commissioner view) */}
+      {isCommissioner && inactiveParticipants.length > 0 && (
+        <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-border">
+            <h3 className="text-sm font-medium text-muted-foreground">History ({inactiveParticipants.length})</h3>
+          </div>
+          <div className="divide-y divide-border">
+            {inactiveParticipants.map(p => (
+              <div key={p.id} className="px-5 py-3 flex items-center gap-3 opacity-60">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">{p.displayName || p.username}</p>
+                  <p className="text-xs text-muted-foreground">@{p.username}</p>
+                </div>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${statusColor(p.status)}`}>{statusLabel(p.status)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -32,6 +32,8 @@ const schema = z.object({
   requireEuropean: z.boolean().default(true),
   requireRow: z.boolean().default(true),
   requireOutsideTop30: z.boolean().default(true),
+  visibility: z.enum(["public", "private"]).default("private"),
+  joinMode: z.enum(["open_join", "approval_required", "invite_only", "link_only"]).default("invite_only"),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -49,6 +51,8 @@ export default function NewTournamentPage() {
       missedCutPenalty: 5, replacementTopRankLockout: 10,
       scoringPlaces: 50, firstPlacePoints: 50,
       requireAmerican: true, requireEuropean: true, requireRow: true, requireOutsideTop30: true,
+      visibility: "private" as const,
+      joinMode: "invite_only" as const,
     },
   });
 
@@ -60,6 +64,8 @@ export default function NewTournamentPage() {
         startDate: values.startDate,
         endDate: values.endDate,
         notes: values.notes || null,
+        visibility: values.visibility,
+        joinMode: values.joinMode,
         config: {
           salaryCap: values.salaryCap,
           salaryMax: values.salaryMax,
@@ -268,6 +274,61 @@ export default function NewTournamentPage() {
                   )} />
                 ))}
               </div>
+            </div>
+
+            {/* Access Settings */}
+            <div className="bg-card border border-card-border rounded-xl p-6 space-y-4">
+              <h2 className="font-semibold text-foreground">Access Settings</h2>
+              <FormField control={form.control} name="visibility" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Visibility</FormLabel>
+                  <FormDescription className="text-xs">Who can see this tournament in the list</FormDescription>
+                  <div className="flex gap-3 mt-2">
+                    {([
+                      { value: "private" as const, label: "Private", desc: "Only invited members can see it" },
+                      { value: "public" as const, label: "Public", desc: "Anyone can discover it" },
+                    ]).map(({ value, label, desc }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => field.onChange(value)}
+                        data-testid={`visibility-${value}`}
+                        className={`flex-1 py-2.5 px-4 rounded-lg border text-sm text-left transition-all ${field.value === value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}
+                      >
+                        <div className="font-medium">{label}</div>
+                        <div className="text-xs opacity-75 mt-0.5">{desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="joinMode" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Join Mode</FormLabel>
+                  <FormDescription className="text-xs">How new players can enter the tournament</FormDescription>
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    {([
+                      { value: "invite_only" as const, label: "Invite Only", desc: "Commissioner invites each player" },
+                      { value: "approval_required" as const, label: "Approval Required", desc: "Players request; commissioner approves" },
+                      { value: "open_join" as const, label: "Open Join", desc: "Anyone can join immediately" },
+                      { value: "link_only" as const, label: "Link Only", desc: "Join via secret invite link" },
+                    ]).map(({ value, label, desc }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => field.onChange(value)}
+                        data-testid={`join-mode-${value}`}
+                        className={`py-2.5 px-4 rounded-lg border text-sm text-left transition-all ${field.value === value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}
+                      >
+                        <div className="font-medium">{label}</div>
+                        <div className="text-xs opacity-75 mt-0.5">{desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )} />
             </div>
 
             <div className="flex gap-3">
