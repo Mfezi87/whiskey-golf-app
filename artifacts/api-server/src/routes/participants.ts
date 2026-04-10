@@ -93,16 +93,9 @@ router.get("/tournaments/:id/participants", asyncHandler(async (req, res): Promi
     if (!allowed) {
       if (tournament.joinMode === "link_only" && userId !== null) {
         const inviteToken = req.query.invite as string | undefined;
-        if (inviteToken) {
-          try {
-            validateInviteLinkToken(tournament, inviteToken);
-            allowedViaToken = true;
-          } catch {
-            throw new UnauthorizedError("Invalid or expired invite link token");
-          }
-        } else {
-          throw new UnauthorizedError("You do not have access to this tournament");
-        }
+        if (!inviteToken) throw new UnauthorizedError("You do not have access to this tournament");
+        validateInviteLinkToken(tournament, inviteToken);
+        allowedViaToken = true;
       } else {
         throw new UnauthorizedError("You do not have access to this tournament");
       }

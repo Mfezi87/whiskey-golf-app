@@ -84,24 +84,17 @@ router.get("/tournaments", asyncHandler(async (req, res): Promise<void> => {
 
     const myTournamentIds = myParticipations.map((p) => p.tournamentId);
 
-    if (myTournamentIds.length > 0) {
-      tournaments = await db
-        .select()
-        .from(tournamentsTable)
-        .where(
-          or(
-            eq(tournamentsTable.visibility, "public"),
-            inArray(tournamentsTable.id, myTournamentIds),
-          ),
-        )
-        .orderBy(tournamentsTable.createdAt);
-    } else {
-      tournaments = await db
-        .select()
-        .from(tournamentsTable)
-        .where(eq(tournamentsTable.visibility, "public"))
-        .orderBy(tournamentsTable.createdAt);
-    }
+    const conditions = [
+      eq(tournamentsTable.visibility, "public"),
+      eq(tournamentsTable.commissionerUserId, userId),
+      ...(myTournamentIds.length > 0 ? [inArray(tournamentsTable.id, myTournamentIds)] : []),
+    ];
+
+    tournaments = await db
+      .select()
+      .from(tournamentsTable)
+      .where(or(...conditions))
+      .orderBy(tournamentsTable.createdAt);
   } else {
     tournaments = await db
       .select()
