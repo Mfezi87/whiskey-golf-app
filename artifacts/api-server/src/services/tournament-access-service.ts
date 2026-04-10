@@ -1,5 +1,5 @@
 import { db, tournamentsTable, tournamentParticipantsTable } from "@workspace/db";
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { UnauthorizedError, BadRequestError } from "../lib/http-errors";
 
 export type TournamentRow = typeof tournamentsTable.$inferSelect;
@@ -51,7 +51,7 @@ export async function canViewTournament(tournament: TournamentRow, userId: numbe
       and(
         eq(tournamentParticipantsTable.tournamentId, tournament.id),
         eq(tournamentParticipantsTable.userId, userId),
-        ne(tournamentParticipantsTable.status, "removed"),
+        inArray(tournamentParticipantsTable.status, ["joined", "invited", "requested"]),
       ),
     );
   return !!participant;

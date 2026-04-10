@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, tournamentsTable, tournamentConfigsTable, tournamentPositionPointsTable, fantasyTeamsTable, tournamentGolfersTable, usersTable, tournamentParticipantsTable } from "@workspace/db";
-import { eq, or, inArray, ne, and } from "drizzle-orm";
+import { eq, or, inArray, and } from "drizzle-orm";
 import {
   UpdateTournamentConfigBody,
   SetPositionPointsBody,
@@ -83,7 +83,7 @@ router.get("/tournaments", asyncHandler(async (req, res): Promise<void> => {
       .where(
         and(
           eq(tournamentParticipantsTable.userId, userId),
-          ne(tournamentParticipantsTable.status, "removed"),
+          inArray(tournamentParticipantsTable.status, ["joined", "invited", "requested"]),
         ),
       );
 

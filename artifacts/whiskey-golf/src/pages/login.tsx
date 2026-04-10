@@ -30,7 +30,9 @@ export default function LoginPage() {
       onSuccess: (data) => {
         const user = (data as { user: { id: number; username: string; displayName: string; createdAt: string } }).user;
         setUser(user);
-        setLocation("/");
+        const returnTo = sessionStorage.getItem("returnTo");
+        sessionStorage.removeItem("returnTo");
+        setLocation(returnTo ?? "/");
       },
       onError: (err) => {
         const msg = (err as { data?: { error?: string } }).data?.error ?? "Login failed";

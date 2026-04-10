@@ -8,6 +8,10 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isLoading && !user) {
+      const current = window.location.pathname + window.location.search;
+      if (current !== "/" && current !== "/login" && current !== "/register") {
+        sessionStorage.setItem("returnTo", current);
+      }
       setLocation("/login");
     }
   }, [user, isLoading, setLocation]);
