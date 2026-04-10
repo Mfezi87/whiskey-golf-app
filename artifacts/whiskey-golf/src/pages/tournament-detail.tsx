@@ -65,8 +65,23 @@ export default function TournamentDetailPage() {
   const [, navigate] = useLocation();
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const pageInviteToken = new URLSearchParams(window.location.search).get("invite");
+  const tournamentDetailUrl = pageInviteToken
+    ? `/api/tournaments/${id}?invite=${encodeURIComponent(pageInviteToken)}`
+    : `/api/tournaments/${id}`;
   const { data: tournament, isLoading: tLoading } = useGetTournament(id, {
-    query: { queryKey: getGetTournamentQueryKey(id), enabled: !isNaN(id) },
+    query: {
+      queryKey: [...getGetTournamentQueryKey(id), pageInviteToken ?? ""],
+      enabled: !isNaN(id),
+      queryFn: async ({ signal }: { signal?: AbortSignal }) => {
+        const res = await fetch(tournamentDetailUrl, { signal });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(d.error ?? `HTTP ${res.status}`);
+        }
+        return res.json();
+      },
+    },
   });
   const t = tournament as { id: number; name: string; courseName?: string | null; startDate: string; endDate: string; status: string; notes?: string | null; winnerId?: number | null; commissionerUserId?: number | null; visibility?: string; joinMode?: string } | undefined;
 

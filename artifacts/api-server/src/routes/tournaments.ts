@@ -17,7 +17,7 @@ import {
 } from "@workspace/api-zod";
 import { asyncHandler } from "../middlewares/error-handler";
 import { BadRequestError, UnauthorizedError } from "../lib/http-errors";
-import { assertCommissioner, getTournamentOrThrow, canViewTournament } from "../services/tournament-access-service";
+import { assertCommissioner, getTournamentOrThrow, canViewTournament, validateInviteLinkToken } from "../services/tournament-access-service";
 
 const router: IRouter = Router();
 
@@ -173,7 +173,15 @@ router.get("/tournaments/:id", asyncHandler(async (req, res): Promise<void> => {
   const isCommissioner = userId !== null && tournament.commissionerUserId === userId;
   if (!isCommissioner) {
     const allowed = await canViewTournament(tournament, userId);
-    if (!allowed) throw new UnauthorizedError("You do not have access to this tournament");
+    if (!allowed) {
+      if (tournament.joinMode === "link_only" && userId !== null) {
+        const inviteToken = req.query.invite as string | undefined;
+        if (!inviteToken) throw new UnauthorizedError("You do not have access to this tournament");
+        validateInviteLinkToken(tournament, inviteToken);
+      } else {
+        throw new UnauthorizedError("You do not have access to this tournament");
+      }
+    }
   }
 
   const [config] = await db.select().from(tournamentConfigsTable).where(eq(tournamentConfigsTable.tournamentId, tournament.id));
