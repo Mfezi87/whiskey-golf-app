@@ -26,8 +26,9 @@ import crypto from "crypto";
 
 const router: IRouter = Router();
 
-function parseId(raw: string): number {
-  const n = parseInt(raw, 10);
+function parseId(raw: string | string[]): number {
+  const id = Array.isArray(raw) ? raw[0] : raw;
+  const n = parseInt(id, 10);
   if (isNaN(n)) throw new BadRequestError("Invalid id");
   return n;
 }

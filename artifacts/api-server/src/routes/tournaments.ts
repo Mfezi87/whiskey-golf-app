@@ -242,8 +242,21 @@ router.patch("/tournaments/:id", asyncHandler(async (req, res): Promise<void> =>
   if (isChangingAccess) {
     if (!userId) throw new UnauthorizedError("Must be logged in");
     assertCommissioner(tournament, userId);
-    if (tournament.status !== "draft") {
-      throw new BadRequestError("Cannot change visibility or join mode after tournament has started");
+
+    // Prevent visibility/joinMode changes after participants have joined
+    const hasJoinedParticipants = await db
+      .select({ id: tournamentParticipantsTable.id })
+      .from(tournamentParticipantsTable)
+      .where(
+        and(
+          eq(tournamentParticipantsTable.tournamentId, params.data.id),
+          inArray(tournamentParticipantsTable.status, ["joined", "invited", "requested"])
+        )
+      )
+      .limit(1);
+
+    if (hasJoinedParticipants.length > 0) {
+      throw new BadRequestError("Cannot change visibility or join mode after participants have joined the tournament");
     }
   }
 
