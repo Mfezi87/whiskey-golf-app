@@ -1,21 +1,15 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { useAuth } from "@/lib/auth";
-import { useLogout } from "@workspace/api-client-react";
-import { Trophy, Home, LayoutList, LogOut, BarChart3 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Home, LayoutList, LogOut, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
-  const { user } = useAuth();
-  const logout = useLogout();
+  const { user, logout } = useAuth();
 
   const handleLogout = () => {
-    logout.mutate(undefined, {
-      onSuccess: () => {
-        window.location.href = "/login";
-      },
-    });
+    logout();
   };
 
   const navItems = [

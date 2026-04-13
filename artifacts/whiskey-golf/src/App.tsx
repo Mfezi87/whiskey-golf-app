@@ -35,42 +35,36 @@ function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function Router() {
-  return (
-    <Switch>
-      <Route path="/login">
-        <PublicOnlyRoute><LoginPage /></PublicOnlyRoute>
-      </Route>
-      <Route path="/register">
-        <PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>
-      </Route>
-      <Route path="/">
-        <ProtectedRoute><DashboardPage /></ProtectedRoute>
-      </Route>
-      <Route path="/tournaments">
-        <ProtectedRoute><TournamentsPage /></ProtectedRoute>
-      </Route>
-      <Route path="/tournaments/new">
-        <ProtectedRoute><NewTournamentPage /></ProtectedRoute>
-      </Route>
-      <Route path="/tournaments/:id">
-        <ProtectedRoute><TournamentDetailPage /></ProtectedRoute>
-      </Route>
-      <Route path="/leaderboard">
-        <ProtectedRoute><LeaderboardPage /></ProtectedRoute>
-      </Route>
-      <Route component={NotFound} />
-    </Switch>
-  );
-}
-
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <AuthProvider>
-            <Router />
+            <Switch>
+              <Route path="/login">
+                <PublicOnlyRoute><LoginPage /></PublicOnlyRoute>
+              </Route>
+              <Route path="/register">
+                <PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>
+              </Route>
+              <Route path="/">
+                <ProtectedRoute><DashboardPage /></ProtectedRoute>
+              </Route>
+              <Route path="/tournaments">
+                <ProtectedRoute><TournamentsPage /></ProtectedRoute>
+              </Route>
+              <Route path="/tournaments/new">
+                <ProtectedRoute><NewTournamentPage /></ProtectedRoute>
+              </Route>
+              <Route path="/tournaments/:id">
+                <ProtectedRoute><TournamentDetailPage /></ProtectedRoute>
+              </Route>
+              <Route path="/leaderboard">
+                <ProtectedRoute><LeaderboardPage /></ProtectedRoute>
+              </Route>
+              <Route component={NotFound} />
+            </Switch>
           </AuthProvider>
         </WouterRouter>
         <Toaster />
